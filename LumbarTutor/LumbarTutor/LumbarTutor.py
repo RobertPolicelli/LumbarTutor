@@ -127,8 +127,9 @@ class LumbarTutorGuidelet(Guidelet):
     # TODO: Guidelet is not really designed to handle multiple connector nodes, but we need one for the ultrasound and one for the webcam
     # Let us create another one here for the webcam
     # Probably the Guidelet should eventually be updated to handle these cases, as we often have tracked ultrasound and webcam anymore
-    self.webcamConnectorNode = slicer.util.getNode('PlusWebcamConnector')
-    if not self.webcamConnectorNode:
+    try:
+      self.webcamConnectorNode = slicer.util.getNode('PlusWebcamConnector')
+    except slicer.util.MRMLNodeNotFoundException:
       self.webcamConnectorNode = self.createPlusConnector( self.parameterNode.GetParameter('PlusWebcamServerHostNamePort') )
       self.webcamConnectorNode.SetName( "PlusWebcamConnector" )
     self.webcamConnectorNode.Start()
@@ -224,36 +225,60 @@ class LumbarTutorGuidelet(Guidelet):
     logging.debug('Create transforms')    
 
     # The transforms to be received from PLUS
-    self.probeToReference = slicer.util.getNode('ProbeToReference')
-    if not self.probeToReference:
+    try:
+      self.probeToReference = slicer.util.getNode('ProbeToReference')
+    except slicer.util.MRMLNodeNotFoundException:
       self.probeToReference = slicer.vtkMRMLLinearTransformNode()
       self.probeToReference.SetName("ProbeToReference")
       slicer.mrmlScene.AddNode(self.probeToReference)
-      
-    self.needleToReference = slicer.util.getNode('NeedleToReference')
-    if not self.needleToReference:
+
+    try:
+      self.needleToReference = slicer.util.getNode('NeedleToReference')
+    except slicer.util.MRMLNodeNotFoundException:
       self.needleToReference = slicer.vtkMRMLLinearTransformNode()
       self.needleToReference.SetName('NeedleToReference')
       slicer.mrmlScene.AddNode(self.needleToReference)
-      
-    self.imageToProbe = slicer.util.getNode('ImageToProbe')
-    if not self.imageToProbe:
-      self.imageToProbe = slicer.vtkMRMLLinearTransformNode()
+
+    try:
+      self.imageToProbe = slicer.util.getNode('ImageToProbe')
+    except slicer.util.MRMLNodeNotFoundException:
+      imageToProbeFilePath = os.path.join(moduleDir, 'Resources', 'ImageToProbe.h5')
+
+      try:
+        self.imageToProbe = slicer.util.loadTransform(imageToProbeFilePath)
+        self.imageToProbe.SetName("ImageToProbe")
+      except:
+        logging.error('Could not read ImageToProbe!')
+      '''self.imageToProbe = slicer.vtkMRMLLinearTransformNode()
       self.imageToProbe.SetName('ImageToProbe')
-      slicer.mrmlScene.AddNode(self.imageToProbe)
+      slicer.mrmlScene.AddNode(self.imageToProbe)'''
 
     # Transforms to be computed from calibration
-    self.probeModelToProbe = slicer.util.getNode('ProbeModelToProbe')
-    if not self.probeModelToProbe:
-      probeToReferenceFilePath = os.path.join(moduleDir, 'Resources', 'ProbeModelToProbe_L14-5.h5')
-      [success, self.probeModelToProbe] = slicer.util.loadTransform(probeToReferenceFilePath, returnNode = True)
-      if success == False:
-        logging.error('Could not read probe model to probe transform for Sonix L14-5!')
-      else:
-        self.probeModelToProbe.SetName("ProbeModelToProbe")
+    try:
+      self.probeModelToProbe = slicer.util.getNode('ProbeModelToProbe')
+    except slicer.util.MRMLNodeNotFoundException:
+      probeToReferenceFilePath = os.path.join(moduleDir, 'Resources', 'ProbeModelToProbe_L12_1.h5')
 
-    self.needleTipToNeedle = slicer.util.getNode('NeedleTipToNeedle')
-    if not self.needleTipToNeedle:
+      try:
+        self.probeModelToProbe = slicer.util.loadTransform(probeToReferenceFilePath)
+        self.probeModelToProbe.SetName("ProbeModelToProbe")
+      except:
+        logging.error('Could not read probe model to probe transform for Sonix L14-5!')
+
+    try:
+      self.ultrasound_flip = slicer.util.getNode('Flip2')
+    except slicer.util.MRMLNodeNotFoundException:
+      flip2FilePath = os.path.join(moduleDir, 'Resources', 'Flip2.h5')
+
+      try:
+        self.ultrasound_flip = slicer.util.loadTransform(flip2FilePath)
+        self.ultrasound_flip.SetName("Flip2")
+      except:
+        logging.error('Could not read Flip2 transform for ultrasound probe')
+
+    try:
+      self.needleTipToNeedle = slicer.util.getNode('NeedleTipToNeedle')
+    except slicer.util.MRMLNodeNotFoundException:
       self.needleTipToNeedle = slicer.vtkMRMLLinearTransformNode()
       self.needleTipToNeedle.SetName('NeedleTipToNeedle')
       m = self.logic.readTransformFromSettings('NeedleTipToNeedle', self.configurationName)
@@ -262,22 +287,27 @@ class LumbarTutorGuidelet(Guidelet):
       slicer.mrmlScene.AddNode(self.needleTipToNeedle)
 
     # Models
+
+
     logging.debug('Create models')
 
-    self.usProbeModel = slicer.util.getNode('UsProbe')
-    if not self.usProbeModel:
-      modelFilePath = os.path.join(moduleDir, 'Resources', 'Probe_L14-5_38.stl')
-      [success, self.usProbeModel] = slicer.util.loadModel(modelFilePath, returnNode = True)
+    try:
+      self.usProbeModel = slicer.util.getNode('UsProbe')
+    except slicer.util.MRMLNodeNotFoundException:
+      modelFilePath = os.path.join(moduleDir, 'Resources', 'Telemed_L12.stl')
+      self.usProbeModel = slicer.util.loadModel(modelFilePath)
       self.usProbeModel.SetName('UsProbe')
       self.usProbeModel.GetDisplayNode().SetColor(0.9, 0.9, 0.9)
 
-    self.needleModel = slicer.util.getNode('NeedleModel')
-    if not self.needleModel:
+    try:
+      self.needleModel = slicer.util.getNode('NeedleModel')
+    except slicer.util.MRMLNodeNotFoundException:
       self.needleModel = slicer.modules.createmodels.logic().CreateNeedle(80, 1.0, 0, 0)
       self.needleModel.SetName('NeedleModel')
-      
-    self.spineModel = slicer.util.getNode('SpineModel')
-    if not self.spineModel:
+
+    try:
+      self.spineModel = slicer.util.getNode('SpineModel')
+    except slicer.util.MRMLNodeNotFoundException:
       self.spineModel = slicer.vtkMRMLModelNode()
       self.spineModel.SetName('SpineModel')
       self.spineModel.SetScene(slicer.mrmlScene)
@@ -285,9 +315,10 @@ class LumbarTutorGuidelet(Guidelet):
       self.spineModel.CreateDefaultDisplayNodes()
       self.spineModel.GetDisplayNode().SetColor(0.95, 0.85, 0.55) #bone
       self.spineModel.SetAndObservePolyData( vtk.vtkPolyData() )
-      
-    self.tissueModel = slicer.util.getNode('TissueModel')
-    if not self.tissueModel:
+
+    try:
+      self.tissueModel = slicer.util.getNode('TissueModel')
+    except slicer.util.MRMLNodeNotFoundException:
       self.tissueModel = slicer.vtkMRMLModelNode()
       self.tissueModel.SetName('TissueModel')
       self.tissueModel.SetScene(slicer.mrmlScene)
@@ -299,17 +330,19 @@ class LumbarTutorGuidelet(Guidelet):
       
     # Images
     logging.debug('Create images')
-    
-    self.ultrasound_Ultrasound = slicer.util.getNode('Ultrasound_Ultrasoun') # Max 20 character name due to OpenIGTLink standard
-    if not self.ultrasound_Ultrasound:
+
+    try:
+      self.ultrasound_Ultrasound = slicer.util.getNode('Image_Image') # Max 20 character name due to OpenIGTLink standard
+    except slicer.util.MRMLNodeNotFoundException:
       self.ultrasound_Ultrasound = slicer.vtkMRMLScalarVolumeNode()
-      self.ultrasound_Ultrasound.SetName('Ultrasound_Ultrasoun')
+      self.ultrasound_Ultrasound.SetName('Image_Image')
       slicer.mrmlScene.AddNode(self.ultrasound_Ultrasound)
-      
-    self.webcam_Webcam = slicer.util.getNode('Webcam_Webcam')
-    if not self.webcam_Webcam:
-      self.webcam_Webcam = slicer.vtkMRMLScalarVolumeNode()
-      self.webcam_Webcam.SetName('Webcam_Webcam')
+
+    try:
+      self.webcam_Webcam = slicer.util.getNode('Webcam_Reference')
+    except slicer.util.MRMLNodeNotFoundException:
+      self.webcam_Webcam = slicer.vtkMRMLStreamingVolumeNode()
+      self.webcam_Webcam.SetName('Webcam_Reference')
       slicer.mrmlScene.AddNode(self.webcam_Webcam)
 
     self.displayImageInSliceViewer(self.ultrasound_Ultrasound.GetID(), "Red", False, 180)
@@ -318,9 +351,9 @@ class LumbarTutorGuidelet(Guidelet):
     # Load the spine "scenes"
     logging.debug('Create spine scenes')
     
-    spineScenes = glob.glob( os.path.join( moduleDir, 'Resources', 'SpineScenes', "*.mrb" ) )
+    '''spineScenes = glob.glob( os.path.join( moduleDir, 'Resources', 'SpineScenes', "*.mrb" ) )
     for spine in spineScenes:
-      slicer.util.loadScene( spine )
+      slicer.util.loadScene( spine )'''
 
     # Build transform tree
     logging.debug('Set up transform tree')
@@ -328,11 +361,12 @@ class LumbarTutorGuidelet(Guidelet):
     self.probeToReference.SetAndObserveTransformNodeID(self.referenceToRas.GetID())
     self.needleToReference.SetAndObserveTransformNodeID(self.referenceToRas.GetID())
     self.imageToProbe.SetAndObserveTransformNodeID(self.probeToReference.GetID())
-    
-    self.probeModelToProbe.SetAndObserveTransformNodeID(self.probeToReference.GetID())    
+
+    self.probeModelToProbe.SetAndObserveTransformNodeID(self.probeToReference.GetID())
     self.needleTipToNeedle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
-    
-    self.usProbeModel.SetAndObserveTransformNodeID(self.probeModelToProbe.GetID())
+
+    self.ultrasound_flip.SetAndObserveTransformNodeID(self.probeModelToProbe.GetID())
+    self.usProbeModel.SetAndObserveTransformNodeID(self.ultrasound_flip.GetID())
     self.needleModel.SetAndObserveTransformNodeID(self.needleTipToNeedle.GetID())
     
     self.ultrasound_Ultrasound.SetAndObserveTransformNodeID(self.imageToProbe.GetID())
@@ -383,7 +417,7 @@ class LumbarTutorGuidelet(Guidelet):
 
   def createPlusConnector(self, hostNamePort):
     connectorNode = slicer.vtkMRMLIGTLConnectorNode()
-    connectorNode.SetLogErrorIfServerConnectionFailed(False)
+    #connectorNode.SetLogErrorIfServerConnectionFailed(False)
     slicer.mrmlScene.AddNode(connectorNode)
     [hostName, port] = hostNamePort.split(':')
     connectorNode.SetTypeClient(hostName, int(port))
@@ -571,7 +605,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.recordingsTable = qt.QTableWidget()
     self.recordingsTable.setRowCount(0)
     self.recordingsTable.setColumnCount(2)
-    self.recordingsTable.horizontalHeader().setResizeMode(0, qt.QHeaderView.Stretch)
+    self.recordingsTable.horizontalHeader().setSectionResizeMode(0, qt.QHeaderView.Stretch)
     self.recordingsTable.setHorizontalHeaderLabels( [ "Recording name", "Delete" ] )
     
     self.saveRecordingsButton = qt.QPushButton()
@@ -595,7 +629,7 @@ class LumbarTutorGuidelet(Guidelet):
     # update the table, displaying the name of the node as well as a delete button
     # for that node. The connection is handled by the partial function that links
     # a unique removeSequenceBrowserNodeFromScene function with the generated button.
-    for nodeNumber in xrange(numberOfNodes):
+    for nodeNumber in range(numberOfNodes):
       aSequenceBrowserNode = slicer.mrmlScene.GetNthNodeByClass(nodeNumber,"vtkMRMLSequenceBrowserNode")
       recordingsTableItem = qt.QTableWidgetItem(aSequenceBrowserNode.GetName())
       deleteRecordingsTableButton = qt.QPushButton()
@@ -631,12 +665,12 @@ class LumbarTutorGuidelet(Guidelet):
     slicer.mrmlScene.RemoveNode(browserNodeToDelete) # Do this first, otherwise, it will remove all the virtual data nodes from the scene
 
     # Iterate through the synced sequence nodes to remove both them from the scene
-    for nodeIndex in xrange (syncedSequenceNodes.GetNumberOfItems()):
+    for nodeIndex in range (syncedSequenceNodes.GetNumberOfItems()):
       syncedSequenceNode = syncedSequenceNodes.GetItemAsObject(nodeIndex)
       slicer.mrmlScene.RemoveNode(syncedSequenceNode)
 
     # Iterate through the virtual output nodes to remove both them from the scene
-    for nodeIndex in xrange (virtualOutputNodes.GetNumberOfItems()):
+    for nodeIndex in range (virtualOutputNodes.GetNumberOfItems()):
       virtualOutputNode = virtualOutputNodes.GetItemAsObject(nodeIndex)
       #slicer.mrmlScene.RemoveNode(virtualOutputNode) # Do not remove from scene, so the transform hierarchy is maintained
 
@@ -647,7 +681,7 @@ class LumbarTutorGuidelet(Guidelet):
       os.makedirs(savedScenesDirectory) # Make the directory if it doesn't already exist
     
     recordingCollection = slicer.mrmlScene.GetNodesByClass( "vtkMRMLSequenceBrowserNode" )
-    for nodeNumber in xrange( recordingCollection.GetNumberOfItems() ):
+    for nodeNumber in range( recordingCollection.GetNumberOfItems() ):
       browserNode = recordingCollection.GetItemAsObject( nodeNumber )
       filename = browserNode.GetName() + "-" + time.strftime("%Y%m%d-%H%M%S") + os.extsep + "sqbr"
       filename = os.path.join( savedScenesDirectory, filename )
@@ -739,16 +773,16 @@ class LumbarTutorGuidelet(Guidelet):
 
 
     # Generic needle-plane distance/angle computation
-    __, needlePlaneDistanceAngleScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "NeedlePlaneDistanceAngle.py" ), "Python Metric Script", {}, True )
+    needlePlaneDistanceAngleScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "NeedlePlaneDistanceAngle.py" ), "Python Metric Script", {})
 
     # Generic in-action computation
-    __, inActionScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "InAction.py" ), "Python Metric Script", {}, True )
+    inActionScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "InAction.py" ), "Python Metric Script", {})
 
     # Max/average needle-tip to ultrasound plane distance/angle
-    __, maximumNeedlePlaneDistanceScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "MaximumNeedlePlaneDistance.py" ), "Python Metric Script", {}, True )
-    __, averageNeedlePlaneDistanceScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "AverageNeedlePlaneDistance.py" ), "Python Metric Script", {}, True )
-    __, maximumNeedlePlaneAngleScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "MaximumNeedlePlaneAngle.py" ), "Python Metric Script", {}, True )
-    __, averageNeedlePlaneAngleScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "AverageNeedlePlaneAngle.py" ), "Python Metric Script", {}, True )
+    maximumNeedlePlaneDistanceScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "MaximumNeedlePlaneDistance.py" ), "Python Metric Script", {})
+    averageNeedlePlaneDistanceScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "AverageNeedlePlaneDistance.py" ), "Python Metric Script", {})
+    maximumNeedlePlaneAngleScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "MaximumNeedlePlaneAngle.py" ), "Python Metric Script", {})
+    averageNeedlePlaneAngleScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "AverageNeedlePlaneAngle.py" ), "Python Metric Script", {})
 
     # Everything should be OK with the same roles
     peLogic.SetMetricInstancesRolesToID( self.perkEvaluatorNode, self.needleTipToNeedle.GetID(), "Needle", slicer.vtkMRMLMetricInstanceNode.TransformRole )
@@ -915,7 +949,7 @@ class LumbarTutorGuidelet(Guidelet):
       
   def stopSequenceBrowserPlayback(self):
     sequenceBrowserNodes = slicer.mrmlScene.GetNodesByClass("vtkMRMLSequenceBrowserNode")
-    for i in xrange( sequenceBrowserNodes.GetNumberOfItems() ):
+    for i in range( sequenceBrowserNodes.GetNumberOfItems() ):
       currSequenceBrowserNode = sequenceBrowserNodes.GetItemAsObject( i )
       currSequenceBrowserNode.SetPlaybackActive(False)
       self.setPlaybackRealtime(currSequenceBrowserNode)
@@ -951,7 +985,7 @@ class LumbarTutorGuidelet(Guidelet):
     displayableManagers = vtk.vtkCollection()
     sliceView.getDisplayableManagers( displayableManagers )
     rulerDisplayableManager = None
-    for i in xrange( displayableManagers.GetNumberOfItems() ):
+    for i in range( displayableManagers.GetNumberOfItems() ):
       if ( displayableManagers.GetItemAsObject( i ).IsA( "vtkMRMLRulerDisplayableManager" ) ):
         rulerDisplayableManager = displayableManagers.GetItemAsObject( i ) #Borrow the ruler displayable manager
     if ( rulerDisplayableManager is None ):
@@ -1038,11 +1072,14 @@ class LumbarTutorGuidelet(Guidelet):
 
       # Remove anything unncessary from the renderer and dictionaries
       sphereIndices = usMarkersProperties[ "Spheres" ].keys()
+      indexesToRemove = []
       for index in sphereIndices:
-        if ( index >= dotIndex ):
-          usMarkersProperties[ "Renderer" ].RemoveActor( usMarkersProperties[ "Actors" ][ index ] )
-          del usMarkersProperties[ "Actors" ][ index ]
-          del usMarkersProperties[ "Spheres" ][ index ]
+        if (index >= dotIndex):
+          indexesToRemove.append(index)
+      for index in indexesToRemove:
+        usMarkersProperties["Renderer"].RemoveActor(usMarkersProperties["Actors"][index])
+        del usMarkersProperties["Actors"][index]
+        del usMarkersProperties["Spheres"][index]
 
       # Add the text for the Marked side of the probe
       if ( usMarkersProperties[ "MarkActor" ] is None ):
@@ -1063,19 +1100,20 @@ class LumbarTutorGuidelet(Guidelet):
     
   def displayImageInSliceViewer(self, imageNodeID, sliceName, flip, rotate):
     # First, find the volume reslice driver logic
+    print(f"setting up display: {imageNodeID} {sliceName}")
     sliceWidget = slicer.app.layoutManager().sliceWidget( sliceName )
-    if ( sliceWidget is None ):
-      return
+    '''if ( sliceWidget is None ):
+      return'''
 
     sliceNode = sliceWidget.sliceView().mrmlSliceNode()
     sliceLogic = sliceWidget.sliceLogic()
-    if ( sliceNode is None or sliceLogic is None ):
-      return
+    '''if ( sliceNode is None or sliceLogic is None ):
+      return'''
 
     vrdLogic = slicer.modules.volumereslicedriver.logic()
-    if ( vrdLogic is None ):
+    '''if ( vrdLogic is None ):
       logging.error( "LumbarTutorLogic::displayImageInSliceViewer could not find Volume Reslice Driver logic." )
-      return
+      return'''
 
     sliceLogic.GetSliceCompositeNode().SetBackgroundVolumeID(imageNodeID)
     
