@@ -7,7 +7,6 @@ from Guidelet import Guidelet
 import logging
 import time
 
-
 class LumbarTutor(GuideletLoadable):
   """Uses GuideletLoadable class, available at:
   """
@@ -151,24 +150,35 @@ class LumbarTutorGuidelet(Guidelet):
     self.setupSliceUSMarkers("Red")
 
     # Setting button open on startup.
-    self.calibrationCollapsibleButton.setProperty('collapsed', False)
+    self.calibrationCollapsibleButton.setProperty('collapsed', True)
 
 
   def createFeaturePanels(self):
-    # Create GUI panels
+    # 1. Initialize the base Guidelet panels (this safely boots up core logic)
+    featurePanelList = Guidelet.createFeaturePanels(self)
+    
+    # 2. Hide the default Ultrasound tab so it doesn't show up on screen
+    self.ultrasoundCollapsibleButton.setVisible(False)
+
+    # 3. Setup Anatomy Tab (Top)
+    self.anatomyCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.setupAnatomyPanel()
+
+    # 4. Setup Calibration Tab (Middle)
     self.calibrationCollapsibleButton = ctk.ctkCollapsibleButton()
     self.calibrationSetupPanel()
 
-    featurePanelList = Guidelet.createFeaturePanels(self)
-    self.addSnapshotsToUltrasoundPanel()
-    self.addSpineSelectionToUltrasoundPanel()
-    self.addRecordingsTableToUltrasoundPanel()
+    # 5. Setup Procedure Tab (Bottom)
+    self.procedureCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.setupProcedurePanel()
 
-    self.resultsCollapsibleButton = ctk.ctkCollapsibleButton()
-    self.setupResultsPanel()
+    # Tell Slicer to exclusively use our three custom panels
+    featurePanelList = [self.anatomyCollapsibleButton, self.calibrationCollapsibleButton, self.procedureCollapsibleButton]
 
-    featurePanelList[len(featurePanelList):] = [self.calibrationCollapsibleButton, self.resultsCollapsibleButton]
-
+    self.anatomyCollapsibleButton.setProperty('collapsed', False)
+    self.calibrationCollapsibleButton.setProperty('collapsed', True) 
+    self.procedureCollapsibleButton.setProperty('collapsed', True)   
+    self.advancedCollapsibleButton.setProperty('collapsed', True)    # Starts CLOSED
     return featurePanelList
 
 
@@ -186,8 +196,32 @@ class LumbarTutorGuidelet(Guidelet):
     logging.debug('LumbarTutorGuidelet.setupConnections()')
     Guidelet.setupConnections(self)
     
+    # Inside setupConnections(self):
+
     self.calibrationCollapsibleButton.connect('toggled(bool)', self.onCalibrationSetupPanelToggled)
-    self.resultsCollapsibleButton.connect('toggled(bool)', self.onResultsPanelToggled)
+    self.procedureCollapsibleButton.connect('toggled(bool)', self.onProcedureTabToggled)
+    self.anatomyCollapsibleButton.connect('toggled(bool)', self.onAnatomyTabToggled)
+    
+    self.l3Button.connect('clicked(bool)', self.onL3Clicked)
+    self.l4Button.connect('clicked(bool)', self.onL4Clicked)
+    self.l5Button.connect('clicked(bool)', self.onL5Clicked)
+    self.ligamentumButton.connect('clicked(bool)', self.onLigamentumClicked)
+    self.spinalCordButton.connect('clicked(bool)', self.onSpinalCordClicked)
+    
+    self.insStep1Button.connect('clicked(bool)', self.onInsStep1Clicked)
+    self.insStep2Button.connect('clicked(bool)', self.onInsStep2Clicked)
+    self.insStep3Button.connect('clicked(bool)', self.onInsStep3Clicked)
+    self.insStep4Button.connect('clicked(bool)', self.onInsStep4Clicked)
+    
+    self.fluidStep1Button.connect('clicked(bool)', self.onFluidStep1Clicked)
+    self.fluidStep2Button.connect('clicked(bool)', self.onFluidStep2Clicked)
+    self.fluidStep3Button.connect('clicked(bool)', self.onFluidStep3Clicked)
+    self.fluidStep4Button.connect('clicked(bool)', self.onFluidStep4Clicked)
+
+    self.compStep1Button.connect('clicked(bool)', self.onCompStep1Clicked)
+    self.compStep2Button.connect('clicked(bool)', self.onCompStep2Clicked)
+    self.compStep3Button.connect('clicked(bool)', self.onCompStep3Clicked)
+
     
     self.pivotCalibrationButton.connect('clicked(bool)', self.onNeedleCalibrationClicked)
     self.spinCalibrationButton.connect('clicked(bool)', self.onSpinCalibrationClicked)    
@@ -195,21 +229,20 @@ class LumbarTutorGuidelet(Guidelet):
     
     self.viewAlignmentButton.connect('clicked()', self.align3DView)
     
-    self.ultrasoundSnapshotButton.connect('clicked()', self.onUltrasoundSnapshotClicked)
-    self.clearSnapshotsButton.connect('clicked()', self.onClearSnapshotsClicked)
-    
-    self.spineComboBox.connect('currentNodeChanged(bool)',self.onSpineSelected)
-    
-    self.ultrasound.startStopRecordingButton.connect('clicked(bool)', self.onStartStopRecordingClicked)
-    
-    slicer.mrmlScene.AddObserver(vtk.vtkCommand.ModifiedEvent, self.updateRecordingsTable)
-    self.recordingsTable.connect('cellChanged(int, int)', self.updateSequenceBrowserNodeName)
-    self.saveRecordingsButton.connect('clicked()', self.saveAllRecordings)
+    self.step1Button.connect('clicked(bool)', self.onStep1Clicked)
+    self.step2Button.connect('clicked(bool)', self.onStep2Clicked)
+    self.step3Button.connect('clicked(bool)', self.onStep3Clicked)
+    self.step4Button.connect('clicked(bool)', self.onStep4Clicked)
+    self.step5Button.connect('clicked(bool)', self.onStep5Clicked)
     
     # Keyboard shortcuts
     if ( not hasattr( self, 'startStopShortcutPlus' ) or self.startStopShortcutPlus is None ):
       self.startStopShortcutPlus = qt.QShortcut( qt.QKeySequence( "+" ), self.sliceletDockWidget )
     self.startStopShortcutPlus.connect('activated()', self.ultrasound.startStopRecordingButton.click )
+    # --- Advance Step Keyboard Shortcut ---
+    if not hasattr(self, 'advanceStepShortcut') or self.advanceStepShortcut is None:
+      self.advanceStepShortcut = qt.QShortcut(qt.QKeySequence("p"), self.sliceletDockWidget)
+    self.advanceStepShortcut.connect('activated()', self.onAdvanceStepShortcut)
 
 
   def setupScene(self): #applet specific
@@ -392,28 +425,186 @@ class LumbarTutorGuidelet(Guidelet):
   def disconnect(self):#TODO see connect
     logging.debug('LumbarTutor.disconnect()')
     Guidelet.disconnect(self)
+    # Inside disconnect(self):    
+    self.compStep1Button.disconnect('clicked(bool)', self.onCompStep1Clicked)
+    self.compStep2Button.disconnect('clicked(bool)', self.onCompStep2Clicked)
+    self.compStep3Button.disconnect('clicked(bool)', self.onCompStep3Clicked)
 
     self.calibrationCollapsibleButton.disconnect('toggled(bool)', self.onCalibrationSetupPanelToggled)
-    self.resultsCollapsibleButton.disconnect('toggled(bool)', self.onResultsPanelToggled)
+    self.procedureCollapsibleButton.disconnect('toggled(bool)', self.onProcedureTabToggled)
+    self.anatomyCollapsibleButton.disconnect('toggled(bool)', self.onAnatomyTabToggled)
+    
+    self.l3Button.disconnect('clicked(bool)', self.onL3Clicked)
+    self.l4Button.disconnect('clicked(bool)', self.onL4Clicked)
+    self.l5Button.disconnect('clicked(bool)', self.onL5Clicked)
+    self.ligamentumButton.disconnect('clicked(bool)', self.onLigamentumClicked)
+    self.spinalCordButton.disconnect('clicked(bool)', self.onSpinalCordClicked)
+    
+    self.insStep1Button.disconnect('clicked(bool)', self.onInsStep1Clicked)
+    self.insStep2Button.disconnect('clicked(bool)', self.onInsStep2Clicked)
+    self.insStep3Button.disconnect('clicked(bool)', self.onInsStep3Clicked)
+    self.insStep4Button.disconnect('clicked(bool)', self.onInsStep4Clicked)
+    
+    self.fluidStep1Button.disconnect('clicked(bool)', self.onFluidStep1Clicked)
+    self.fluidStep2Button.disconnect('clicked(bool)', self.onFluidStep2Clicked)
+    self.fluidStep3Button.disconnect('clicked(bool)', self.onFluidStep3Clicked)
+    self.fluidStep4Button.disconnect('clicked(bool)', self.onFluidStep4Clicked)
     
     self.pivotCalibrationButton.disconnect('clicked(bool)', self.onNeedleCalibrationClicked)
     self.spinCalibrationButton.disconnect('clicked(bool)', self.onSpinCalibrationClicked)
     self.pivotSamplingTimer.disconnect('timeout()', self.onPivotSamplingTimeout)
     
     self.viewAlignmentButton.disconnect('clicked(bool)', self.align3DView)
+    
+    self.step1Button.disconnect('clicked(bool)', self.onStep1Clicked)
+    self.step2Button.disconnect('clicked(bool)', self.onStep2Clicked)
+    self.step3Button.disconnect('clicked(bool)', self.onStep3Clicked)
+    self.step4Button.disconnect('clicked(bool)', self.onStep4Clicked)
+    self.step5Button.disconnect('clicked(bool)', self.onStep5Clicked)
 
-    self.ultrasoundSnapshotButton.disconnect('clicked()', self.onUltrasoundSnapshotClicked)
-    self.clearSnapshotsButton.disconnect('clicked()', self.onClearSnapshotsClicked)
-    
-    self.ultrasound.startStopRecordingButton.disconnect('clicked(bool)', self.onStartStopRecordingClicked)
-    
-    slicer.mrmlScene.RemoveObserver(vtk.vtkCommand.ModifiedEvent, self.updateRecordingsTable)
-    self.recordingsTable.disconnect('cellChanged(int, int)', self.updateSequenceBrowserNodeName)
-    self.saveRecordingsButton.disconnect('clicked()', self.saveAllRecordings)
+    try:
+      self.loadButton.disconnect('clicked()', self.onLoadButtonClicked)
+      self.saveButton.disconnect('clicked()', self.saveAllRecordings)
+      self.exitButton.disconnect('clicked()', self.onExitButtonClicked)
+    except AttributeError:
+      pass
     
     # Keyboard shortcuts
     self.startStopShortcutPlus.disconnect('activated()', self.ultrasound.startStopRecordingButton.click )
+    try:
+      self.advanceStepShortcut.disconnect('activated()', self.onAdvanceStepShortcut)
+    except AttributeError:
+      pass
 
+
+  def onAnatomyTabToggled(self, toggled):
+    if toggled:
+      # Close all the other tabs
+      self.calibrationCollapsibleButton.setProperty('collapsed', True)
+      self.procedureCollapsibleButton.setProperty('collapsed', True)
+  
+  def onAdvanceStepShortcut(self):
+    """Triggered when the user presses 'p'. Finds the active step and clicks it."""
+    
+    # --- Check if Anatomy Tab is open ---
+    if not self.anatomyCollapsibleButton.collapsed:
+      anatomyButtons = [
+        self.l3Button, self.l4Button, self.l5Button, 
+        self.ligamentumButton, self.spinalCordButton
+      ]
+      for btn in anatomyButtons:
+        # Find the first button that is both visible and hasn't been clicked yet
+        if btn.isVisible() and btn.isEnabled():
+          btn.click() # Virtually click it!
+          break # Stop after clicking one
+          
+    # --- Check if Procedure Tab is open ---
+    elif not self.procedureCollapsibleButton.collapsed:
+      procedureButtons = [
+        self.step1Button, self.step2Button, self.step3Button, self.step4Button, self.step5Button,
+        self.insStep1Button, self.insStep2Button, self.insStep3Button, self.insStep4Button,
+        self.fluidStep1Button, self.fluidStep2Button, self.fluidStep3Button, self.fluidStep4Button,
+        self.compStep1Button, self.compStep2Button, self.compStep3Button
+      ]
+      for btn in procedureButtons:
+        if btn.isVisible() and btn.isEnabled():
+          btn.click() # Virtually click it!
+          break
+
+  # --- Anatomy Click Logic ---
+  def onL3Clicked(self):
+    print("User is attempting to click L3...")
+    # Add your 3D viewer interaction logic here
+    self.advanceAnatomyStep(self.l3Button, self.l4Button)
+
+  def onL4Clicked(self):
+    print("User is attempting to click L4...")
+    # Add your 3D viewer interaction logic here
+    self.advanceAnatomyStep(self.l4Button, self.l5Button)
+
+  def onL5Clicked(self):
+    print("User is attempting to click L5...")
+    # Add your 3D viewer interaction logic here
+    self.advanceAnatomyStep(self.l5Button, self.ligamentumButton)
+    
+  def onLigamentumClicked(self):
+    print("User is attempting to click Ligamentum Flavum...")
+    # Add your 3D viewer interaction logic here
+    self.advanceAnatomyStep(self.ligamentumButton, self.spinalCordButton)
+
+  def onSpinalCordClicked(self):
+    print("User is attempting to click Spinal Cord end...")
+    # Add your 3D viewer interaction logic here
+    self.advanceAnatomyStep(self.spinalCordButton, None)
+    
+
+  # ==========================================
+  # PHASE 1 CLICK LOGIC
+  # ==========================================
+  def onStep1Clicked(self):
+    self.advanceProcedureStep(self.step1Button, self.step2Button)
+
+  def onStep2Clicked(self):
+    self.advanceProcedureStep(self.step2Button, self.step3Button)
+
+  def onStep3Clicked(self):
+    self.advanceProcedureStep(self.step3Button, self.step4Button)
+      
+  def onStep4Clicked(self):
+    self.advanceProcedureStep(self.step4Button, self.step5Button)
+
+  def onStep5Clicked(self):
+    # Transition to Needle Insertion phase
+    self.advanceProcedureStep(self.step5Button, self.insStep1Button)
+
+  # ==========================================
+  # PHASE 2 CLICK LOGIC
+  # ==========================================
+  def onInsStep1Clicked(self):
+    self.advanceProcedureStep(self.insStep1Button, self.insStep2Button)
+
+  def onInsStep2Clicked(self):
+    # NOTE: We use brackets [] here because this step reveals TWO buttons at once!
+    self.advanceProcedureStep(self.insStep2Button, self.insStep3Button)
+
+  def onInsStep3Clicked(self):
+    self.advanceProcedureStep(self.insStep3Button, self.insStep4Button) # No new buttons reveal here
+
+  def onInsStep4Clicked(self):
+    # Transition to Fluid phase
+    self.advanceProcedureStep(self.insStep4Button,self.fluidStep1Button)
+
+  # ==========================================
+  # PHASE 3 CLICK LOGIC
+  # ==========================================
+  def onFluidStep1Clicked(self):
+    self.advanceProcedureStep(self.fluidStep1Button, self.fluidStep2Button)
+
+  def onFluidStep2Clicked(self):
+    self.advanceProcedureStep(self.fluidStep2Button, self.fluidStep3Button)
+
+  def onFluidStep3Clicked(self):
+    self.advanceProcedureStep(self.fluidStep3Button, self.fluidStep4Button)
+
+  def onFluidStep4Clicked(self):
+    # Transition to Completion phase
+    self.advanceProcedureStep(self.fluidStep4Button, self.compStep1Button)
+
+  # ==========================================
+  # PHASE 4 CLICK LOGIC
+  # ==========================================
+  def onCompStep1Clicked(self):
+    self.advanceProcedureStep(self.compStep1Button, self.compStep2Button)
+
+  def onCompStep2Clicked(self):
+    self.advanceProcedureStep(self.compStep2Button, self.compStep3Button)
+
+  def onCompStep3Clicked(self):
+    self.advanceProcedureStep(self.compStep3Button, None)
+
+    
+    if self.ultrasound.startStopRecordingButton.isChecked():
+        self.ultrasound.startStopRecordingButton.click()
 
   def createPlusConnector(self, hostNamePort):
     connectorNode = slicer.vtkMRMLIGTLConnectorNode()
@@ -426,7 +617,50 @@ class LumbarTutorGuidelet(Guidelet):
 
     
   def setupTopPanel(self):
-    pass
+    buttonMinWidth = 48
+
+    # 1. Create the layout
+    self.topPanelLayout = qt.QGridLayout()
+
+    # 2. CRITICAL FIX: Insert it at the very top of the main Guidelet panel (Index 0)
+    self.sliceletPanelLayout.insertLayout(0, self.topPanelLayout)
+
+    # 3. Load Button
+    self.loadButton = qt.QPushButton()
+    self.loadButton.setIcon(qt.QIcon(qt.QApplication.style().standardIcon(qt.QStyle.SP_DialogOpenButton)))
+    self.loadButton.setMinimumWidth(buttonMinWidth)
+    self.loadButton.toolTip = 'Load Volume'
+    self.topPanelLayout.addWidget(self.loadButton, 0, 0)
+    self.loadButton.connect('clicked()', self.onLoadButtonClicked)
+
+    # 4. Save Button
+    self.saveButton = qt.QPushButton()
+    self.saveButton.setIcon(qt.QIcon(qt.QApplication.style().standardIcon(qt.QStyle.SP_DialogSaveButton)))
+    self.saveButton.setMinimumWidth(buttonMinWidth)
+    self.saveButton.toolTip = 'Save All Recordings'
+    self.topPanelLayout.addWidget(self.saveButton, 0, 1)
+    self.saveButton.connect('clicked()', self.saveAllRecordings)
+
+    # 5. Exit Button
+    self.exitButton = qt.QPushButton()
+    self.exitButton.toolTip = 'Exit'
+    self.exitButton.setMinimumWidth(buttonMinWidth)
+    self.exitButton.setIcon(qt.QIcon(qt.QApplication.style().standardIcon(qt.QStyle.SP_BrowserStop)))
+    self.topPanelLayout.addWidget(self.exitButton, 0, 2)
+    self.exitButton.connect('clicked()', self.onExitButtonClicked)
+
+    # Push the buttons to the left side
+    self.topPanelLayout.setColumnStretch(3, 1)
+
+  def onLoadButtonClicked(self):
+    io = slicer.app.ioManager()
+    params = {}
+    io.openDialog("VolumeFile", slicer.qSlicerDataDialog.Read, params)
+
+  def onExitButtonClicked(self):
+    mainwindow = slicer.util.mainWindow()
+    if mainwindow:
+      mainwindow.close()
 
   def calibrationSetupPanel(self):
     logging.debug('calibrationSetupPanel')
@@ -469,7 +703,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.isSpinCalibration = False
 
     self.pivotCalibrationLogic.SetAndObserveTransformNode(self.needleToReference)
-    self.pivotCalibrationStopTime = time.time() + 5.0  #TODO: Make this a node parameter
+    self.pivotCalibrationStopTime = time.time() + 5.0  
     self.pivotCalibrationLogic.SetRecordingState(True)
     self.onPivotSamplingTimeout()
 
@@ -579,7 +813,7 @@ class LumbarTutorGuidelet(Guidelet):
     
 
   def addSnapshotsToUltrasoundPanel(self):
-    self.ultrasoundCollapsibleButton.text = "Procedure"
+    self.ultrasoundCollapsibleButton.text = "Ultrasound"
 
     # Snapshots
     self.ultrasoundSnapshotButton = qt.QPushButton("Ultrasound snapshot")
@@ -688,6 +922,218 @@ class LumbarTutorGuidelet(Guidelet):
       slicer.util.saveNode( browserNode, filename )
 
 
+  def setupAnatomyPanel(self):
+      import logging
+      logging.debug('setupAnatomyPanel')
+
+      self.anatomyCollapsibleButton = ctk.ctkCollapsibleButton()
+      self.anatomyCollapsibleButton.setProperty('collapsedHeight', 20)
+      self.anatomyCollapsibleButton.text = "Anatomy"
+      self.anatomyCollapsibleButton.setMinimumWidth(380) # Match the width of the Procedure tab
+      self.sliceletPanelLayout.addWidget(self.anatomyCollapsibleButton)
+
+      # Set up the Scroll Area
+      self.anatomyCollapsibleLayout = qt.QVBoxLayout(self.anatomyCollapsibleButton)
+      self.anatomyCollapsibleLayout.setContentsMargins(0, 0, 0, 0)
+      
+      self.anatomyScrollArea = qt.QScrollArea()
+      self.anatomyScrollArea.setWidgetResizable(True)
+      self.anatomyScrollArea.setFrameShape(qt.QFrame.NoFrame)
+      self.anatomyScrollArea.setVerticalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOn)
+      self.anatomyScrollArea.setHorizontalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOff)
+      self.anatomyCollapsibleLayout.addWidget(self.anatomyScrollArea)
+
+      self.anatomyContainerWidget = qt.QWidget()
+      self.anatomyScrollArea.setWidget(self.anatomyContainerWidget)
+
+      self.anatomyLayout = qt.QVBoxLayout(self.anatomyContainerWidget)
+      self.anatomyLayout.setContentsMargins(12, 4, 4, 4)
+      self.anatomyLayout.setSpacing(4)
+
+      # --- BUTTON 1: L3 (Visible initially) ---
+      self.l3Button = self.createWrappedButton("Click the L3")
+      self.anatomyLayout.addWidget(self.l3Button)
+
+      # --- BUTTON 2: L4 (Hidden initially) ---
+      self.l4Button = self.createWrappedButton("Click the L4")
+      self.l4Button.setVisible(False)
+      self.anatomyLayout.addWidget(self.l4Button)
+
+      # --- BUTTON 3: L5 (Hidden initially) ---
+      self.l5Button = self.createWrappedButton("Click the L5")
+      self.l5Button.setVisible(False)
+      self.anatomyLayout.addWidget(self.l5Button)
+
+      # --- BUTTON 4: Ligamentum Flavum (Hidden initially) ---
+      self.ligamentumButton = self.createWrappedButton("Click the Ligamentum Flavum")
+      self.ligamentumButton.setVisible(False)
+      self.anatomyLayout.addWidget(self.ligamentumButton)
+
+      # --- BUTTON 5: Spinal Cord (Hidden initially) ---
+      self.spinalCordButton = self.createWrappedButton("Click where the solid spinal cord ends")
+      self.spinalCordButton.setVisible(False)
+      self.anatomyLayout.addWidget(self.spinalCordButton)
+      
+      self.anatomyLayout.addStretch(1)
+  
+  def createWrappedButton(self, text):
+    # 1. Create a pure, native C++ QPushButton so Slicer styles it perfectly!
+    btn = qt.QPushButton()
+    btn.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.MinimumExpanding)
+    
+    # 2. Create the transparent, word-wrapping label
+    label = qt.QLabel(text)
+    label.setWordWrap(True)
+    label.setAlignment(qt.Qt.AlignCenter)
+    label.setAttribute(qt.Qt.WA_TransparentForMouseEvents)
+    # Inherit text color so it changes dynamically in dark/light mode
+    label.setStyleSheet("background-color: transparent; color: inherit;") 
+    
+    # 3. Add the label inside the button
+    btnLayout = qt.QVBoxLayout(btn)
+    btnLayout.setContentsMargins(8, 8, 8, 8)
+    btnLayout.addWidget(label)
+    return btn
+  
+  def advanceProcedureStep(self, currentButton, nextButtons=None):
+    """Disables current step, reveals next step(s), and auto-scrolls to the bottom."""
+    # 1. Disable the current button (locks it in place without changing its text)
+    currentButton.setEnabled(False)
+    
+    # 2. Reveal the next button(s)
+    if nextButtons is not None:
+      # This allows the function to handle a single button OR a list of multiple buttons
+      if not isinstance(nextButtons, list):
+        nextButtons = [nextButtons]
+      for btn in nextButtons:
+        btn.setVisible(True)
+        
+    # 3. Force Slicer to instantly calculate the new height of the Procedure tab
+    slicer.app.processEvents()
+    
+    # 4. Auto-scroll to the absolute bottom to push the previous steps up!
+    scrollBar = self.procedureScrollArea.verticalScrollBar()
+    scrollBar.setValue(scrollBar.maximum)
+  
+  def advanceAnatomyStep(self, currentButton, nextButtons=None):
+    """Disables current Anatomy step, reveals next step(s), and auto-scrolls to the bottom."""
+    currentButton.setEnabled(False)
+    
+    if nextButtons is not None:
+      if not isinstance(nextButtons, list):
+        nextButtons = [nextButtons]
+      for btn in nextButtons:
+        btn.setVisible(True)
+        
+    slicer.app.processEvents()
+    
+    # Auto-scroll to the bottom of the Anatomy tab
+    scrollBar = self.anatomyScrollArea.verticalScrollBar()
+    scrollBar.setValue(scrollBar.maximum)
+
+  def setupProcedurePanel(self):
+    import logging
+    logging.debug('setupProcedurePanel')
+
+    self.procedureCollapsibleButton.setProperty('collapsedHeight', 20)
+    self.procedureCollapsibleButton.text = "Procedure"
+    self.sliceletPanelLayout.addWidget(self.procedureCollapsibleButton)
+
+    self.procedureCollapsibleLayout = qt.QVBoxLayout(self.procedureCollapsibleButton)
+    self.procedureCollapsibleLayout.setContentsMargins(0, 0, 0, 0)
+    
+    self.procedureScrollArea = qt.QScrollArea()
+    self.procedureScrollArea.setWidgetResizable(True) 
+    self.procedureScrollArea.setFrameShape(qt.QFrame.NoFrame)
+    self.procedureScrollArea.setVerticalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOn)   # Forces scrollbar to always show
+    self.procedureScrollArea.setHorizontalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOff) # Prevents bottom scrollbar
+    self.procedureCollapsibleButton.setMinimumWidth(380) # Makes the tab wider (adjust the 380 if you want it wider/narrower)
+    self.procedureCollapsibleLayout.addWidget(self.procedureScrollArea)
+
+    self.procedureContainerWidget = qt.QWidget()
+    self.procedureScrollArea.setWidget(self.procedureContainerWidget)
+
+    self.procedureLayout = qt.QVBoxLayout(self.procedureContainerWidget)
+    self.procedureLayout.setContentsMargins(12, 4, 4, 4)
+    self.procedureLayout.setSpacing(4)
+
+    # ==========================================
+    # PHASE 1: PRE-PROCEDURE
+    # ==========================================
+    self.step1Button = self.createWrappedButton("Before Begining, the patient should be positioned in the lateral decubitus position or upright leaning forward withtheir feet supported, with their back facing the clinician. The patient's hips and knees should be flexed to open up the spaces between the vertebrae.")
+    self.procedureLayout.addWidget(self.step1Button)
+
+    self.step2Button = self.createWrappedButton("Palpate the iliac crests and spinous processes L3, L4, L5")
+    self.step2Button.setVisible(False) 
+    self.procedureLayout.addWidget(self.step2Button)
+
+    self.step3Button = self.createWrappedButton("Palpate the L4/L5 interspace, specifically at the midline")
+    self.step3Button.setVisible(False) 
+    self.procedureLayout.addWidget(self.step3Button)
+
+    self.step4Button = self.createWrappedButton("Mark that spot with a marker or pen")
+    self.step4Button.setVisible(False) 
+    self.procedureLayout.addWidget(self.step4Button)
+
+    self.step5Button = self.createWrappedButton("Wash hands, apply gloves, drape the patient, and prepare the tools")
+    self.step5Button.setVisible(False) 
+    self.procedureLayout.addWidget(self.step5Button)
+
+    # ==========================================
+    # PHASE 2: NEEDLE INSERTION
+    # ==========================================
+    self.insStep1Button = self.createWrappedButton("Sterilize the field")
+    self.insStep1Button.setVisible(False) 
+    self.procedureLayout.addWidget(self.insStep1Button)
+
+    self.insStep2Button = self.createWrappedButton("Inject idocane at the site of the procedure (subcutaneous injection)")
+    self.insStep2Button.setVisible(False) 
+    self.procedureLayout.addWidget(self.insStep2Button)
+
+    self.insStep3Button = self.createWrappedButton("With the stylet in place, insert the needle slowly at the midline (and parallel to it) above the lower spinus process with and angle of 15-20 degrees cephalad")
+    self.insStep3Button.setVisible(False) 
+    self.procedureLayout.addWidget(self.insStep3Button)
+
+    self.insStep4Button = self.createWrappedButton("Feel for a loss of resistance or pop sensation as the needle passes the ligamentum flavum and enters the epidural space \n Note: if you hit bone, move back a few millimeters and try again.")
+    self.insStep4Button.setVisible(False) 
+    self.procedureLayout.addWidget(self.insStep4Button)
+
+    # ==========================================
+    # PHASE 3: FLUID REMOVAL
+    # ==========================================
+    self.fluidStep1Button = self.createWrappedButton("Remove the stylet and note any fluid that appears at the end of the needle \n Note: if no fluid is appearing, place the stylet back in and move slightly forward (3-5 mm deeper) and repeat the process")
+    self.fluidStep1Button.setVisible(False) 
+    self.procedureLayout.addWidget(self.fluidStep1Button)
+
+    self.fluidStep2Button = self.createWrappedButton("Once fluid is collected, reinsert the stylet")
+    self.fluidStep2Button.setVisible(False)
+    self.procedureLayout.addWidget(self.fluidStep2Button)
+
+    self.fluidStep3Button = self.createWrappedButton("Remove the needle slowly") 
+    self.fluidStep3Button.setVisible(False) 
+    self.procedureLayout.addWidget(self.fluidStep3Button)
+
+    self.fluidStep4Button = self.createWrappedButton("Apply pressure to the site and bandage the wound")
+    self.fluidStep4Button.setVisible(False) 
+    self.procedureLayout.addWidget(self.fluidStep4Button)
+
+    # ==========================================
+    # PHASE 4: PROCEDURE COMPLETION
+    # ==========================================
+    self.compStep1Button = self.createWrappedButton("Dispose of the needle in the sharps container")
+    self.compStep1Button.setVisible(False) 
+    self.procedureLayout.addWidget(self.compStep1Button)
+
+    self.compStep2Button = self.createWrappedButton("Clean up the field and remove drapes")
+    self.compStep2Button.setVisible(False) 
+    self.procedureLayout.addWidget(self.compStep2Button)
+
+    self.compStep3Button = self.createWrappedButton("End of Study")
+    self.compStep3Button.setVisible(False) 
+    self.procedureLayout.addWidget(self.compStep3Button)
+    
+    self.procedureLayout.addStretch(1)
+
   def setupResultsPanel(self):
     logging.debug('setupResultsPanel')
 
@@ -755,8 +1201,6 @@ class LumbarTutorGuidelet(Guidelet):
     slicer.mrmlScene.AddNode(self.metricsTableNode)
 
     self.perkEvaluatorNode.SetMetricsTableID( self.metricsTableNode.GetID() )
-    self.metricsTableWidget.setMetricsTableNode(self.metricsTableNode)
-
     # These metrics are all shared
     # No need to create an instance - an instance is already created automatically
     # TODO: This behaviour may be changed. Metrics will eventually be non-shared by default.
@@ -868,20 +1312,11 @@ class LumbarTutorGuidelet(Guidelet):
     # to avoid zooming out of the image.
     self.fitUltrasoundImageToViewOnConnect = not toggled
 
-
-  def onUltrasoundSnapshotClicked(self):
-    logging.debug('onUltrasoundSnapshotClicked')
-
-    snapshotLogic = slicer.modules.ultrasoundsnapshots.logic()
-    snapshotLogic.AddSnapshot(self.ultrasound_Ultrasound, True)
-
-
-  def onClearSnapshotsClicked(self):
-    logging.debug('onClearSnapshotsClicked')
-
-    snapshotLogic = slicer.modules.ultrasoundsnapshots.logic()
-    snapshotLogic.ClearSnapshots()
-    
+  def onProcedureTabToggled(self, toggled):
+    if toggled:
+      # Close all the other tabs
+      self.calibrationCollapsibleButton.setProperty('collapsed', True)
+      self.anatomyCollapsibleButton.setProperty('collapsed', True) 
     
   def onSpineSelected(self):
     selectedSpineModel = self.spineComboBox.currentNode()
