@@ -475,7 +475,8 @@ class LumbarTutorGuidelet(Guidelet):
       self.clickCatcherNode.GetDisplayNode().SetTextScale(0) 
       
     self.clickCatcherObserver = self.clickCatcherNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self.onAnatomy3DClicked)
-    
+    interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
+    self.interactionObserver = interactionNode.AddObserver(slicer.vtkMRMLInteractionNode.InteractionModeChangedEvent, self.enforceCrosshairs)
     # Wait half a second for the 3D viewer to finish loading, then trigger the tab logic
     qt.QTimer.singleShot(500, lambda: self.onAnatomyTabToggled(True))
   
@@ -571,6 +572,12 @@ class LumbarTutorGuidelet(Guidelet):
       self.clickCatcherNode.RemoveObserver(self.clickCatcherObserver)
     except AttributeError:
       pass
+    try:
+      interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
+      if interactionNode and hasattr(self, 'interactionObserver'):
+        interactionNode.RemoveObserver(self.interactionObserver)
+    except AttributeError:
+      pass
 
     try:
       self.loadButton.disconnect('clicked()', self.onLoadButtonClicked)
@@ -622,13 +629,22 @@ class LumbarTutorGuidelet(Guidelet):
           interactionNode.SetCurrentInteractionMode(slicer.vtkMRMLInteractionNode.ViewTransform)
           
     else:
-      if hasattr(self, 'postureTextActor'):
-        self.postureTextActor.SetVisibility(False)
-        slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
       # Turn off the crosshairs if the user closes the Anatomy tab
       interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
       if interactionNode:
         interactionNode.SetCurrentInteractionMode(slicer.vtkMRMLInteractionNode.ViewTransform)
+        
+      for modelNode in self.anatomyModels.values():
+        if modelNode and modelNode.GetDisplayNode():
+          modelNode.GetDisplayNode().SetVisibility(False)
+          
+      for modelNode in getattr(self, 'extendedAnatomyModels', {}).values():
+        if modelNode and modelNode.GetDisplayNode():
+          modelNode.GetDisplayNode().SetVisibility(False)
+          
+      if hasattr(self, 'postureTextActor'):
+        self.postureTextActor.SetVisibility(False)
+        slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
 
   def activateCrosshairs(self):
     """Safely forces the Slicer mouse into Fiducial Placement mode."""
@@ -646,6 +662,20 @@ class LumbarTutorGuidelet(Guidelet):
       # Force the mouse into persistent Place mode
       interactionNode.SetCurrentInteractionMode(slicer.vtkMRMLInteractionNode.Place)
       interactionNode.SetPlaceModePersistence(1)
+
+  def enforceCrosshairs(self, caller, event):
+    """Instantly restores crosshairs if Slicer tries to drop them during the active review."""
+    # 1. If we aren't in the Anatomy tab, let Slicer act normally
+    if self.anatomyCollapsibleButton.collapsed:
+      return
+      
+    # 2. If the user has already finished L5, let them drop the tool to look around
+    if getattr(self, 'anatomyReviewCompleted', False) or getattr(self, 'currentAnatomyTarget', "") == "Done":
+      return
+      
+    # 3. If Slicer changed the mode to anything other than Place, FORCE it back!
+    if caller.GetCurrentInteractionMode() != slicer.vtkMRMLInteractionNode.Place:
+      qt.QTimer.singleShot(0, self.activateCrosshairs)
   
   def onAnatomy3DClicked(self, caller, event):
     """Triggers whenever the user clicks the 3D viewer in the Anatomy tab."""
@@ -656,6 +686,8 @@ class LumbarTutorGuidelet(Guidelet):
     self.clickCatcherNode.GetNthControlPointPosition(lastIndex, clickPosition_RAS)
     
     qt.QTimer.singleShot(10, self.clickCatcherNode.RemoveAllControlPoints)
+    if getattr(self, 'currentAnatomyTarget', "") != "Done" and not getattr(self, 'anatomyReviewCompleted', False):
+      qt.QTimer.singleShot(50, self.activateCrosshairs)
 
     targetModel = self.anatomyModels.get(self.currentAnatomyTarget)
 
@@ -764,8 +796,12 @@ class LumbarTutorGuidelet(Guidelet):
     self.currentAnatomyTarget = "L5"
 
   def onL5Clicked(self):
+    print("User is attempting to click L5...")
     self.advanceAnatomyStep(self.l5Button, [self.togglePostureButton, self.anatomyCompleteButton])
     slicer.util.showStatusMessage("Anatomy Review Complete!", 4000)
+    
+    self.currentAnatomyTarget = "Done" 
+    
     interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
     interactionNode.SetCurrentInteractionMode(slicer.vtkMRMLInteractionNode.ViewTransform)
   
