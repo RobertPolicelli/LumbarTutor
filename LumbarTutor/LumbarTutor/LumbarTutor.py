@@ -143,11 +143,10 @@ class LumbarTutorGuidelet(Guidelet):
 
     self.pivotCalibrationLogic = slicer.modules.pivotcalibration.logic()
 
-    self.navigationView = self.VIEW_ULTRASOUND_CAM_3D
+    self.navigationView = self.VIEW_ULTRASOUND_3D
     self.updateNavigationView()
 
     self.usMarkersPropertiesDict = {}
-    self.setupSliceUSMarkers("Red")
 
     # Setting button open on startup.
     self.calibrationCollapsibleButton.setProperty('collapsed', True)
@@ -197,16 +196,16 @@ class LumbarTutorGuidelet(Guidelet):
     Guidelet.setupConnections(self)
     
     # Inside setupConnections(self):
-
-    self.calibrationCollapsibleButton.connect('toggled(bool)', self.onCalibrationSetupPanelToggled)
-    self.procedureCollapsibleButton.connect('toggled(bool)', self.onProcedureTabToggled)
-    self.anatomyCollapsibleButton.connect('toggled(bool)', self.onAnatomyTabToggled)
-    
+    self.l1Button.connect('clicked(bool)', self.onL1Clicked)
+    self.l2Button.connect('clicked(bool)', self.onL2Clicked)
     self.l3Button.connect('clicked(bool)', self.onL3Clicked)
     self.l4Button.connect('clicked(bool)', self.onL4Clicked)
     self.l5Button.connect('clicked(bool)', self.onL5Clicked)
-    self.ligamentumButton.connect('clicked(bool)', self.onLigamentumClicked)
-    self.spinalCordButton.connect('clicked(bool)', self.onSpinalCordClicked)
+    self.togglePostureButton.connect('clicked(bool)', self.onTogglePostureClicked)
+    self.anatomyCompleteButton.connect('clicked(bool)', self.onAnatomyCompleteClicked)
+    self.calibrationCollapsibleButton.connect('toggled(bool)', self.onCalibrationSetupPanelToggled)
+    self.procedureCollapsibleButton.connect('toggled(bool)', self.onProcedureTabToggled)
+    self.anatomyCollapsibleButton.connect('toggled(bool)', self.onAnatomyTabToggled)
     
     self.insStep1Button.connect('clicked(bool)', self.onInsStep1Clicked)
     self.insStep2Button.connect('clicked(bool)', self.onInsStep2Clicked)
@@ -243,7 +242,6 @@ class LumbarTutorGuidelet(Guidelet):
     if not hasattr(self, 'advanceStepShortcut') or self.advanceStepShortcut is None:
       self.advanceStepShortcut = qt.QShortcut(qt.QKeySequence("p"), self.sliceletDockWidget)
     self.advanceStepShortcut.connect('activated()', self.onAdvanceStepShortcut)
-
 
   def setupScene(self): #applet specific
     logging.debug('setupScene')
@@ -325,14 +323,6 @@ class LumbarTutorGuidelet(Guidelet):
     logging.debug('Create models')
 
     try:
-      self.usProbeModel = slicer.util.getNode('UsProbe')
-    except slicer.util.MRMLNodeNotFoundException:
-      modelFilePath = os.path.join(moduleDir, 'Resources', 'Telemed_L12.stl')
-      self.usProbeModel = slicer.util.loadModel(modelFilePath)
-      self.usProbeModel.SetName('UsProbe')
-      self.usProbeModel.GetDisplayNode().SetColor(0.9, 0.9, 0.9)
-
-    try:
       self.needleModel = slicer.util.getNode('NeedleModel')
     except slicer.util.MRMLNodeNotFoundException:
       self.needleModel = slicer.modules.createmodels.logic().CreateNeedle(80, 1.0, 0, 0)
@@ -378,8 +368,9 @@ class LumbarTutorGuidelet(Guidelet):
       self.webcam_Webcam.SetName('Webcam_Reference')
       slicer.mrmlScene.AddNode(self.webcam_Webcam)
 
-    self.displayImageInSliceViewer(self.ultrasound_Ultrasound.GetID(), "Red", False, 180)
+    # self.displayImageInSliceViewer(self.ultrasound_Ultrasound.GetID(), "Red", False, 180)
     self.displayImageInSliceViewer(self.webcam_Webcam.GetID(), "Yellow", True, 0)
+    #slicer.util.getNode('vtkMRMLSliceNodeRed').SetSliceVisible(False)
     
     # Load the spine "scenes"
     logging.debug('Create spine scenes')
@@ -397,9 +388,6 @@ class LumbarTutorGuidelet(Guidelet):
 
     self.probeModelToProbe.SetAndObserveTransformNodeID(self.probeToReference.GetID())
     self.needleTipToNeedle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
-
-    self.ultrasound_flip.SetAndObserveTransformNodeID(self.probeModelToProbe.GetID())
-    self.usProbeModel.SetAndObserveTransformNodeID(self.ultrasound_flip.GetID())
     self.needleModel.SetAndObserveTransformNodeID(self.needleTipToNeedle.GetID())
     
     self.ultrasound_Ultrasound.SetAndObserveTransformNodeID(self.imageToProbe.GetID())
@@ -409,23 +397,146 @@ class LumbarTutorGuidelet(Guidelet):
     for toolBar in sequenceBrowserToolBars:
       toolBar.connect('visibilityChanged(bool)', partial( self.setSequenceBrowserToolBarsVisible, False ) )
 
-    # Hide slice view annotations (patient name, scale, color bar, etc.) as they
-    # decrease reslicing performance by 20%-100%
-    logging.debug('Hide slice view annotations')
-    import DataProbe
-    dataProbeUtil=DataProbe.DataProbeLib.DataProbeUtil()
-    dataProbeParameterNode=dataProbeUtil.getParameterNode()
-    dataProbeParameterNode.SetParameter('showSliceViewAnnotations', '0')
+    # Push the Webcam feed to the Red viewer so it appears in the split screen!
+    self.displayImageInSliceViewer(self.webcam_Webcam.GetID(), "Red", True, 0)
+    # Hide the empty 2D planes floating inside the 3D viewer
+    slicer.util.getNode('vtkMRMLSliceNodeRed').SetSliceVisible(False)
+    slicer.util.getNode('vtkMRMLSliceNodeYellow').SetSliceVisible(False)
+    slicer.util.getNode('vtkMRMLSliceNodeGreen').SetSliceVisible(False)
 
-    # Load and create the metrics
-    metricsDirectory = os.path.join( moduleDir, os.pardir, os.pardir, "Metrics" )
-    self.setupMetrics( metricsDirectory )
+    # ==========================================
+    # INTERACTIVE ANATOMY MODELS
+    # ==========================================
+    # 1. Load the neutral models
+    self.anatomyModels = {
+        "L1": self.loadOrCreateModel('L1Model', '1308055L1EXT.stl', (0.9, 0.9, 0.7)),
+        "L2": self.loadOrCreateModel('L2Model', '1308055L2EXT.stl', (0.9, 0.9, 0.7)),
+        "L3": self.loadOrCreateModel('L3Model', '1308055L3EXT.stl', (0.9, 0.9, 0.7)),
+        "L4": self.loadOrCreateModel('L4Model', '1308055L4EXT.stl', (0.9, 0.9, 0.7)),
+        "L5": self.loadOrCreateModel('L5Model', '1308055L5EXT.stl', (0.9, 0.9, 0.7))
+    }
+    
+    self.extendedAnatomyModels = {
+        "L1": self.loadOrCreateModel('L1Model_Ext', '1308055L1FLEX.stl', (0.9, 0.9, 0.7)),
+        "L2": self.loadOrCreateModel('L2Model_Ext', '1308055L2FLEX.stl', (0.9, 0.9, 0.7)),
+        "L3": self.loadOrCreateModel('L3Model_Ext', '1308055L3FLEX.stl', (0.9, 0.9, 0.7)),
+        "L4": self.loadOrCreateModel('L4Model_Ext', '1308055L4FLEX.stl', (0.9, 0.9, 0.7)),
+        "L5": self.loadOrCreateModel('L5Model_Ext', '1308055L5FLEX.stl', (0.9, 0.9, 0.7))
+    }
+    
+    # Hide the extended models initially so they don't overlap the neutral ones
+    for modelNode in self.extendedAnatomyModels.values():
+      if modelNode and modelNode.GetDisplayNode():
+        modelNode.GetDisplayNode().SetVisibility(False)
+        
+    self.isExtendedPosture = False # Track which state we are currently in
 
+    self.alignExtendedModelsToNeutral()
+
+    # ==========================================
+    # 3D SCREEN TEXT OVERLAY
+    # ==========================================
+    layoutManager = slicer.app.layoutManager()
+    threeDWidget = layoutManager.threeDWidget(0)
+    
+    if threeDWidget:
+      # Grab the actual camera renderer for the 3D view
+      self.renderer = threeDWidget.threeDView().renderWindow().GetRenderers().GetFirstRenderer()
+      
+      # Create the text
+      self.postureTextActor = vtk.vtkTextActor()
+      self.postureTextActor.SetInput("Posture: NEUTRAL")
+      
+      # 1. Make the text much bigger (was 28, now 48)
+      self.postureTextActor.GetTextProperty().SetFontSize(48) 
+      self.postureTextActor.GetTextProperty().SetColor(0.2, 0.8, 1.0) # Light blue
+      self.postureTextActor.GetTextProperty().BoldOn()
+      
+      # 2. Tell the text to anchor itself from its absolute center
+      self.postureTextActor.GetTextProperty().SetJustificationToCentered()
+      self.postureTextActor.GetTextProperty().SetVerticalJustificationToTop()
+      
+      # 3. Use "Normalized" coordinates so it stays centered even if the window resizes
+      self.postureTextActor.GetPositionCoordinate().SetCoordinateSystemToNormalizedViewport()
+      
+      # Set X to 0.5 (dead center horizontally) and Y to 0.05 (very bottom of the screen)
+      self.postureTextActor.SetPosition(0.5, 0.05) 
+      
+      self.postureTextActor.SetVisibility(False) # Keep hidden until Anatomy tab opens
+      
+      # Add it to the screen
+      self.renderer.AddActor(self.postureTextActor)
+
+    # 2. Create the "Click Catcher" Markups Node
+    try:
+      self.clickCatcherNode = slicer.util.getNode('AnatomyClickCatcher')
+    except slicer.util.MRMLNodeNotFoundException:
+      self.clickCatcherNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "AnatomyClickCatcher")
+      self.clickCatcherNode.GetDisplayNode().SetTextScale(0) 
+      
+    self.clickCatcherObserver = self.clickCatcherNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self.onAnatomy3DClicked)
+    
+    # Wait half a second for the 3D viewer to finish loading, then trigger the tab logic
+    qt.QTimer.singleShot(500, lambda: self.onAnatomyTabToggled(True))
+  
+  def loadOrCreateModel(self, nodeName, fileName, color):
+    """Helper to load a model from Resources, or create a blank one if the file is missing."""
+    try:
+      return slicer.util.getNode(nodeName)
+    except slicer.util.MRMLNodeNotFoundException:
+      moduleDir = os.path.dirname(slicer.modules.lumbartutor.path)
+      filePath = os.path.join(moduleDir, 'Resources', fileName)
+      
+      print(f"Attempting to load {nodeName} from: {filePath}")
+      
+      if os.path.exists(filePath):
+        model = slicer.util.loadModel(filePath)
+        model.SetName(nodeName)
+        
+        # ==========================================
+        # AUTO-ROTATION LOGIC
+        # ==========================================
+        # 1. Create a mathematical transform to spin the model
+        transform = vtk.vtkTransform()
+        
+        # Rotate 180 degrees around the Superior/Inferior (Z) axis.
+        # (If "horizontal" means something else for your specific files, 
+        # you can change this to transform.RotateX(180) or transform.RotateY(180)!)
+        transform.RotateZ(180) 
+        
+        # 2. Apply the spin directly to the raw 3D mesh data
+        transformFilter = vtk.vtkTransformPolyDataFilter()
+        transformFilter.SetInputData(model.GetPolyData())
+        transformFilter.SetTransform(transform)
+        transformFilter.Update()
+        
+        # 3. Save the permanently flipped mesh back into the model
+        model.SetAndObservePolyData(transformFilter.GetOutput())
+        # ==========================================
+
+        print(f"SUCCESS: Loaded and rotated {fileName} into the scene!")
+      else:
+        print(f"ERROR: Could not find file at {filePath}. Creating empty invisible model.")
+        model = slicer.vtkMRMLModelNode()
+        model.SetName(nodeName)
+        slicer.mrmlScene.AddNode(model)
+        model.SetAndObservePolyData(vtk.vtkPolyData())
+      
+      model.CreateDefaultDisplayNodes()
+      model.GetDisplayNode().SetColor(color)
+      return model
     
   def disconnect(self):#TODO see connect
     logging.debug('LumbarTutor.disconnect()')
     Guidelet.disconnect(self)
     # Inside disconnect(self):    
+    self.l1Button.disconnect('clicked(bool)', self.onL1Clicked)
+    self.l2Button.disconnect('clicked(bool)', self.onL2Clicked)
+    self.l3Button.disconnect('clicked(bool)', self.onL3Clicked)
+    self.l4Button.disconnect('clicked(bool)', self.onL4Clicked)
+    self.l5Button.disconnect('clicked(bool)', self.onL5Clicked)
+    self.togglePostureButton.disconnect('clicked(bool)', self.onTogglePostureClicked)
+    self.anatomyCompleteButton.disconnect('clicked(bool)', self.onAnatomyCompleteClicked)
     self.compStep1Button.disconnect('clicked(bool)', self.onCompStep1Clicked)
     self.compStep2Button.disconnect('clicked(bool)', self.onCompStep2Clicked)
     self.compStep3Button.disconnect('clicked(bool)', self.onCompStep3Clicked)
@@ -433,12 +544,6 @@ class LumbarTutorGuidelet(Guidelet):
     self.calibrationCollapsibleButton.disconnect('toggled(bool)', self.onCalibrationSetupPanelToggled)
     self.procedureCollapsibleButton.disconnect('toggled(bool)', self.onProcedureTabToggled)
     self.anatomyCollapsibleButton.disconnect('toggled(bool)', self.onAnatomyTabToggled)
-    
-    self.l3Button.disconnect('clicked(bool)', self.onL3Clicked)
-    self.l4Button.disconnect('clicked(bool)', self.onL4Clicked)
-    self.l5Button.disconnect('clicked(bool)', self.onL5Clicked)
-    self.ligamentumButton.disconnect('clicked(bool)', self.onLigamentumClicked)
-    self.spinalCordButton.disconnect('clicked(bool)', self.onSpinalCordClicked)
     
     self.insStep1Button.disconnect('clicked(bool)', self.onInsStep1Clicked)
     self.insStep2Button.disconnect('clicked(bool)', self.onInsStep2Clicked)
@@ -463,6 +568,11 @@ class LumbarTutorGuidelet(Guidelet):
     self.step5Button.disconnect('clicked(bool)', self.onStep5Clicked)
 
     try:
+      self.clickCatcherNode.RemoveObserver(self.clickCatcherObserver)
+    except AttributeError:
+      pass
+
+    try:
       self.loadButton.disconnect('clicked()', self.onLoadButtonClicked)
       self.saveButton.disconnect('clicked()', self.saveAllRecordings)
       self.exitButton.disconnect('clicked()', self.onExitButtonClicked)
@@ -478,20 +588,143 @@ class LumbarTutorGuidelet(Guidelet):
 
 
   def onAnatomyTabToggled(self, toggled):
+    """Triggers when the Anatomy tab opens or closes."""
     if toggled:
-      # Close all the other tabs
+      if hasattr(self, 'postureTextActor'):
+        self.postureTextActor.SetVisibility(True)
+        slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
       self.calibrationCollapsibleButton.setProperty('collapsed', True)
       self.procedureCollapsibleButton.setProperty('collapsed', True)
+      
+      # --- Ensure the correct models are visible when the tab opens ---
+      is_ext = getattr(self, 'isExtendedPosture', False)
+      for key in self.anatomyModels:
+        neu = self.anatomyModels.get(key)
+        ext = self.extendedAnatomyModels.get(key)
+        if neu and neu.GetDisplayNode(): 
+          neu.GetDisplayNode().SetVisibility(not is_ext)
+        if ext and ext.GetDisplayNode(): 
+          ext.GetDisplayNode().SetVisibility(is_ext)
+          
+      if not getattr(self, 'anatomyReviewCompleted', False):
+        
+        # Only set to L1 if they haven't started yet (prevents resetting their progress)
+        if not hasattr(self, 'currentAnatomyTarget'):
+          self.currentAnatomyTarget = "L1" 
+          
+        # Turn on the crosshairs since they are still working on it
+        qt.QTimer.singleShot(100, self.activateCrosshairs)
+        
+      else:
+        # If they are done and just reopening the tab, leave the mouse in scroll/rotate mode!
+        interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
+        if interactionNode:
+          interactionNode.SetCurrentInteractionMode(slicer.vtkMRMLInteractionNode.ViewTransform)
+          
+    else:
+      if hasattr(self, 'postureTextActor'):
+        self.postureTextActor.SetVisibility(False)
+        slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
+      # Turn off the crosshairs if the user closes the Anatomy tab
+      interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
+      if interactionNode:
+        interactionNode.SetCurrentInteractionMode(slicer.vtkMRMLInteractionNode.ViewTransform)
+
+  def activateCrosshairs(self):
+    """Safely forces the Slicer mouse into Fiducial Placement mode."""
+    selectionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLSelectionNodeSingleton")
+    interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
+    
+    if selectionNode and interactionNode and self.clickCatcherNode:
+      # Tell Slicer we want to place points
+      selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+      
+      # Tell Slicer to put those points into our specific Catcher node
+      # (This is the SAFE command that officially takes the .GetID() string without crashing)
+      selectionNode.SetActivePlaceNodeID(self.clickCatcherNode.GetID())
+      
+      # Force the mouse into persistent Place mode
+      interactionNode.SetCurrentInteractionMode(slicer.vtkMRMLInteractionNode.Place)
+      interactionNode.SetPlaceModePersistence(1)
+  
+  def onAnatomy3DClicked(self, caller, event):
+    """Triggers whenever the user clicks the 3D viewer in the Anatomy tab."""
+    lastIndex = self.clickCatcherNode.GetNumberOfControlPoints() - 1
+    if lastIndex < 0: return
+    
+    clickPosition_RAS = [0, 0, 0]
+    self.clickCatcherNode.GetNthControlPointPosition(lastIndex, clickPosition_RAS)
+    
+    qt.QTimer.singleShot(10, self.clickCatcherNode.RemoveAllControlPoints)
+
+    targetModel = self.anatomyModels.get(self.currentAnatomyTarget)
+
+    if self.isClickOnModel(clickPosition_RAS, targetModel):
+      print(f"Correct! User successfully identified {self.currentAnatomyTarget}.")
+      slicer.util.showStatusMessage(f"Correct: {self.currentAnatomyTarget} identified!", 3000)
+      
+      # Advance the UI based on what was just successfully clicked
+      if self.currentAnatomyTarget == "L1":
+        self.advanceAnatomyStep(self.l1Button, self.l2Button)
+        self.currentAnatomyTarget = "L2"
+        
+      elif self.currentAnatomyTarget == "L2":
+        self.advanceAnatomyStep(self.l2Button, self.l3Button)
+        self.currentAnatomyTarget = "L3"
+        
+      elif self.currentAnatomyTarget == "L3":
+        self.advanceAnatomyStep(self.l3Button, self.l4Button)
+        self.currentAnatomyTarget = "L4"
+        
+      elif self.currentAnatomyTarget == "L4":
+        self.advanceAnatomyStep(self.l4Button, self.l5Button)
+        self.currentAnatomyTarget = "L5"
+        
+      elif self.currentAnatomyTarget == "L5":
+        self.advanceAnatomyStep(self.l5Button, [self.togglePostureButton, self.anatomyCompleteButton])
+        slicer.util.showStatusMessage("Anatomy Review Complete!", 4000)
+        interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
+        interactionNode.SetCurrentInteractionMode(slicer.vtkMRMLInteractionNode.ViewTransform)
+        
+    else:
+      slicer.util.showStatusMessage(f"Incorrect. Please click the {self.currentAnatomyTarget}.", 3000)
+
+
+  def isClickOnModel(self, clickPosition_RAS, modelNode, tolerance_mm=10.0): # <--- Increased to 10.0
+    """Uses VTK math to check if a 3D coordinate is physically touching a specific model."""
+    if not modelNode or not modelNode.GetPolyData() or modelNode.GetPolyData().GetNumberOfPoints() == 0:
+      print("Warning: Target model is empty or not loaded.")
+      return False
+      
+    locator = vtk.vtkCellLocator()
+    locator.SetDataSet(modelNode.GetPolyData())
+    locator.BuildLocator()
+    
+    closestPoint = [0.0, 0.0, 0.0]
+    cellId = vtk.reference(0)
+    subId = vtk.reference(0)
+    dist2 = vtk.reference(0.0)
+    
+    locator.FindClosestPoint(clickPosition_RAS, closestPoint, cellId, subId, dist2)
+    
+    import math
+    distance_mm = math.sqrt(dist2.get())
+    
+    # --- ADD THIS DEBUG LINE ---
+    print(f"Distance to target: {distance_mm:.2f} mm") 
+    
+    return distance_mm <= tolerance_mm
   
   def onAdvanceStepShortcut(self):
     """Triggered when the user presses 'p'. Finds the active step and clicks it."""
     
     # --- Check if Anatomy Tab is open ---
     if not self.anatomyCollapsibleButton.collapsed:
+      
       anatomyButtons = [
-        self.l3Button, self.l4Button, self.l5Button, 
-        self.ligamentumButton, self.spinalCordButton
+        self.l1Button, self.l2Button, self.l3Button, self.l4Button, self.l5Button, self.anatomyCompleteButton
       ]
+      
       for btn in anatomyButtons:
         # Find the first button that is both visible and hasn't been clicked yet
         if btn.isVisible() and btn.isEnabled():
@@ -510,34 +743,69 @@ class LumbarTutorGuidelet(Guidelet):
         if btn.isVisible() and btn.isEnabled():
           btn.click() # Virtually click it!
           break
+    
+  # ==========================================
+  # ANATOMY CLICK LOGIC
+  # ==========================================
+  def onL1Clicked(self):
+    self.advanceAnatomyStep(self.l1Button, self.l2Button)
+    self.currentAnatomyTarget = "L2"
 
-  # --- Anatomy Click Logic ---
+  def onL2Clicked(self):
+    self.advanceAnatomyStep(self.l2Button, self.l3Button)
+    self.currentAnatomyTarget = "L3"
+
   def onL3Clicked(self):
-    print("User is attempting to click L3...")
-    # Add your 3D viewer interaction logic here
     self.advanceAnatomyStep(self.l3Button, self.l4Button)
+    self.currentAnatomyTarget = "L4"
 
   def onL4Clicked(self):
-    print("User is attempting to click L4...")
-    # Add your 3D viewer interaction logic here
     self.advanceAnatomyStep(self.l4Button, self.l5Button)
+    self.currentAnatomyTarget = "L5"
 
   def onL5Clicked(self):
-    print("User is attempting to click L5...")
-    # Add your 3D viewer interaction logic here
-    self.advanceAnatomyStep(self.l5Button, self.ligamentumButton)
+    self.advanceAnatomyStep(self.l5Button, [self.togglePostureButton, self.anatomyCompleteButton])
+    slicer.util.showStatusMessage("Anatomy Review Complete!", 4000)
+    interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
+    interactionNode.SetCurrentInteractionMode(slicer.vtkMRMLInteractionNode.ViewTransform)
+  
+  def onTogglePostureClicked(self):
+    """Swaps the visibility of the neutral and extended spine STLs and updates the screen text."""
+    self.isExtendedPosture = not getattr(self, 'isExtendedPosture', False)
     
-  def onLigamentumClicked(self):
-    print("User is attempting to click Ligamentum Flavum...")
-    # Add your 3D viewer interaction logic here
-    self.advanceAnatomyStep(self.ligamentumButton, self.spinalCordButton)
+    for key in self.anatomyModels:
+      neu_model = self.anatomyModels.get(key)
+      ext_model = self.extendedAnatomyModels.get(key)
+      
+      if neu_model and neu_model.GetDisplayNode():
+        neu_model.GetDisplayNode().SetVisibility(not self.isExtendedPosture)
+        
+      if ext_model and ext_model.GetDisplayNode():
+        ext_model.GetDisplayNode().SetVisibility(self.isExtendedPosture)
+        
+    # --- UPDATE THE TEXT OVERLAY ---
+    if hasattr(self, 'postureTextActor'):
+      if self.isExtendedPosture:
+        self.postureTextActor.SetInput("Posture: FLEXED")
+        self.postureTextActor.GetTextProperty().SetColor(1.0, 0.6, 0.2) # Orange
+      else:
+        self.postureTextActor.SetInput("Posture: NEUTRAL")
+        self.postureTextActor.GetTextProperty().SetColor(0.2, 0.8, 1.0) # Light blue
+        
+      # Force Slicer to instantly redraw the 3D window to show the text!
+      slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
 
-  def onSpinalCordClicked(self):
-    print("User is attempting to click Spinal Cord end...")
-    # Add your 3D viewer interaction logic here
-    self.advanceAnatomyStep(self.spinalCordButton, None)
+  def onAnatomyCompleteClicked(self):
+    """Automatically closes Anatomy, hides models, and opens the Calibration tab."""
+    self.anatomyCollapsibleButton.setProperty('collapsed', True)
+    self.calibrationCollapsibleButton.setProperty('collapsed', False)
     
-
+    self.anatomyReviewCompleted = True 
+    
+    for modelNode in self.extendedAnatomyModels.values():
+      if modelNode and modelNode.GetDisplayNode():
+        modelNode.GetDisplayNode().SetVisibility(False)
+  
   # ==========================================
   # PHASE 1 CLICK LOGIC
   # ==========================================
@@ -615,7 +883,54 @@ class LumbarTutorGuidelet(Guidelet):
 
     return connectorNode
 
-    
+  def alignExtendedModelsToNeutral(self):
+    """Calculates the 3D offset between the Neutral L5 and Extended L5, and aligns all extended models."""
+    neu_L5 = self.anatomyModels.get("L5")
+    ext_L5 = self.extendedAnatomyModels.get("L5")
+
+    if not neu_L5 or not ext_L5 or not neu_L5.GetPolyData() or not ext_L5.GetPolyData():
+      print("Warning: L5 models not loaded. Cannot align extended models.")
+      return
+
+    # 1. Calculate the exact Center of Mass for the Neutral L5
+    comFilterNeu = vtk.vtkCenterOfMass()
+    comFilterNeu.SetInputData(neu_L5.GetPolyData())
+    comFilterNeu.Update()
+    centerNeu = comFilterNeu.GetCenter()
+
+    # 2. Calculate the exact Center of Mass for the Extended L5
+    comFilterExt = vtk.vtkCenterOfMass()
+    comFilterExt.SetInputData(ext_L5.GetPolyData())
+    comFilterExt.Update()
+    centerExt = comFilterExt.GetCenter()
+
+    # 3. Calculate the distance (offset) between them in millimeters
+    offsetX = centerNeu[0] - centerExt[0]
+    offsetY = centerNeu[1] - centerExt[1]
+    offsetZ = centerNeu[2] - centerExt[2]
+
+    # 4. Create a Slicer Transform Node to hold this shift
+    try:
+      self.extendedAlignmentTransform = slicer.util.getNode('ExtendedAlignmentTransform')
+    except slicer.util.MRMLNodeNotFoundException:
+      self.extendedAlignmentTransform = slicer.vtkMRMLLinearTransformNode()
+      self.extendedAlignmentTransform.SetName('ExtendedAlignmentTransform')
+      slicer.mrmlScene.AddNode(self.extendedAlignmentTransform)
+
+    # 5. Apply the offset to the transform matrix
+    transformMatrix = vtk.vtkMatrix4x4()
+    transformMatrix.SetElement(0, 3, offsetX)
+    transformMatrix.SetElement(1, 3, offsetY)
+    transformMatrix.SetElement(2, 3, offsetZ)
+    self.extendedAlignmentTransform.SetMatrixTransformToParent(transformMatrix)
+
+    # 6. Attach ALL extended models to this transform so the whole spine moves together!
+    for ext_model in self.extendedAnatomyModels.values():
+      if ext_model:
+        ext_model.SetAndObserveTransformNodeID(self.extendedAlignmentTransform.GetID())
+        
+    print(f"Successfully registered extended models to neutral L5. Shifted by: X:{offsetX:.1f}, Y:{offsetY:.1f}, Z:{offsetZ:.1f} mm")
+
   def setupTopPanel(self):
     buttonMinWidth = 48
 
@@ -810,103 +1125,6 @@ class LumbarTutorGuidelet(Guidelet):
       camera0.SetPosition( spineCenter_RAS[ 0 ] - CAMERA_DISTANCE, spineCenter_RAS[ 1 ] - 50, spineCenter_RAS[ 2 ] )
       camera0.SetViewUp( 0, 0, 1 )
       camera0.GetCamera().SetClippingRange( CAMERA_CLIPPING_RANGE )      
-    
-
-  def addSnapshotsToUltrasoundPanel(self):
-    self.ultrasoundCollapsibleButton.text = "Ultrasound"
-
-    # Snapshots
-    self.ultrasoundSnapshotButton = qt.QPushButton("Ultrasound snapshot")
-    self.ultrasoundLayout.addRow(self.ultrasoundSnapshotButton)
-
-    self.clearSnapshotsButton = qt.QPushButton('Clear ultrasound snapshots')
-    self.ultrasoundLayout.addRow(self.clearSnapshotsButton)
-    
-    
-  def addSpineSelectionToUltrasoundPanel(self):
-    self.spineComboBox = slicer.qMRMLNodeComboBox()
-    self.spineComboBox.nodeTypes = ["vtkMRMLModelNode"]
-    self.spineComboBox.noneEnabled = True
-    self.spineComboBox.removeEnabled = False
-    self.spineComboBox.addEnabled = False
-    self.spineComboBox.renameEnabled = False
-    self.spineComboBox.setMRMLScene(slicer.mrmlScene)
-    self.spineComboBox.sortFilterProxyModel().addAttribute( "vtkMRMLModelNode", "SpineModel" )
-    self.ultrasoundLayout.addRow(self.spineComboBox)
-
-
-  def addRecordingsTableToUltrasoundPanel(self):
-    self.recordingsTable = qt.QTableWidget()
-    self.recordingsTable.setRowCount(0)
-    self.recordingsTable.setColumnCount(2)
-    self.recordingsTable.horizontalHeader().setSectionResizeMode(0, qt.QHeaderView.Stretch)
-    self.recordingsTable.setHorizontalHeaderLabels( [ "Recording name", "Delete" ] )
-    
-    self.saveRecordingsButton = qt.QPushButton()
-    self.saveRecordingsButton.setText( "Save all recordings" )
-    self.saveRecordingsButton.setIcon( slicer.app.style().standardIcon(qt.QStyle.SP_DialogSaveButton) )
-    
-    self.ultrasoundLayout.addRow(qt.QLabel()) # Blank row for spacing between table and buttons.
-    self.ultrasoundLayout.addRow(self.recordingsTable)
-    self.ultrasoundLayout.addRow(self.saveRecordingsButton)
-
-
-  def updateRecordingsTable(self, observer, eventid):
-    # Disconnect the cell changed signal to prevent key errors
-    self.recordingsTable.disconnect('cellChanged(int, int)', self.updateSequenceBrowserNodeName)
-
-    numberOfNodes = slicer.mrmlScene.GetNumberOfNodesByClass("vtkMRMLSequenceBrowserNode")
-    self.recordingsTable.setRowCount(numberOfNodes)
-    self.sequenceBrowserNodeDict = {} # Keys are the row number in the table
-
-    # If a change has been made to the scene with a new sequence browser node,
-    # update the table, displaying the name of the node as well as a delete button
-    # for that node. The connection is handled by the partial function that links
-    # a unique removeSequenceBrowserNodeFromScene function with the generated button.
-    for nodeNumber in range(numberOfNodes):
-      aSequenceBrowserNode = slicer.mrmlScene.GetNthNodeByClass(nodeNumber,"vtkMRMLSequenceBrowserNode")
-      recordingsTableItem = qt.QTableWidgetItem(aSequenceBrowserNode.GetName())
-      deleteRecordingsTableButton = qt.QPushButton()
-      deleteRecordingsTableButton.setIcon( slicer.app.style().standardIcon(qt.QStyle.SP_DialogDiscardButton) )
-      deleteRecordingsTableButton.connect('clicked()', partial(self.removeSequenceBrowserNodeFromScene, nodeNumber))
-
-      # Update the dictionary of sequence browser nodes with the new node
-      self.sequenceBrowserNodeDict[nodeNumber] = aSequenceBrowserNode
-
-      # Add items to the table
-      self.recordingsTable.setItem(nodeNumber, 0, recordingsTableItem)
-      self.recordingsTable.setCellWidget(nodeNumber, 1, deleteRecordingsTableButton)
-
-    # Reconnect the cell changed signal
-    self.recordingsTable.connect('cellChanged(int, int)', self.updateSequenceBrowserNodeName)
-
-
-  def updateSequenceBrowserNodeName(self, row, col):
-    newName = self.recordingsTable.item(row,col).text()
-    self.sequenceBrowserNodeDict[row].SetName(newName)
-
-
-  def removeSequenceBrowserNodeFromScene(self, row):
-    # Get the list of synched sequence nodes from a selected sequence browser node for deletion
-    browserNodeToDelete = self.sequenceBrowserNodeDict[row]
-
-    syncedSequenceNodes = vtk.vtkCollection()
-    browserNodeToDelete.GetSynchronizedSequenceNodes(syncedSequenceNodes, True)
-
-    virtualOutputNodes = vtk.vtkCollection()
-    browserNodeToDelete.GetAllVirtualOutputDataNodes(virtualOutputNodes)
-
-    slicer.mrmlScene.RemoveNode(browserNodeToDelete) # Do this first, otherwise, it will remove all the virtual data nodes from the scene
-
-    # Iterate through the synced sequence nodes to remove both them from the scene
-    for nodeIndex in range (syncedSequenceNodes.GetNumberOfItems()):
-      syncedSequenceNode = syncedSequenceNodes.GetItemAsObject(nodeIndex)
-      slicer.mrmlScene.RemoveNode(syncedSequenceNode)
-
-    # Iterate through the virtual output nodes to remove both them from the scene
-    for nodeIndex in range (virtualOutputNodes.GetNumberOfItems()):
-      virtualOutputNode = virtualOutputNodes.GetItemAsObject(nodeIndex)
-      #slicer.mrmlScene.RemoveNode(virtualOutputNode) # Do not remove from scene, so the transform hierarchy is maintained
 
 
   def saveAllRecordings(self):
@@ -929,10 +1147,9 @@ class LumbarTutorGuidelet(Guidelet):
       self.anatomyCollapsibleButton = ctk.ctkCollapsibleButton()
       self.anatomyCollapsibleButton.setProperty('collapsedHeight', 20)
       self.anatomyCollapsibleButton.text = "Anatomy"
-      self.anatomyCollapsibleButton.setMinimumWidth(380) # Match the width of the Procedure tab
+      self.anatomyCollapsibleButton.setMinimumWidth(380)
       self.sliceletPanelLayout.addWidget(self.anatomyCollapsibleButton)
 
-      # Set up the Scroll Area
       self.anatomyCollapsibleLayout = qt.QVBoxLayout(self.anatomyCollapsibleButton)
       self.anatomyCollapsibleLayout.setContentsMargins(0, 0, 0, 0)
       
@@ -950,29 +1167,36 @@ class LumbarTutorGuidelet(Guidelet):
       self.anatomyLayout.setContentsMargins(12, 4, 4, 4)
       self.anatomyLayout.setSpacing(4)
 
-      # --- BUTTON 1: L3 (Visible initially) ---
-      self.l3Button = self.createWrappedButton("Click the L3")
+      # --- Updated to explicitly match your L1-L5 STLs! ---
+      self.l1Button = self.createWrappedButton("Click the L1 Vertebra")
+      self.anatomyLayout.addWidget(self.l1Button)
+
+      self.l2Button = self.createWrappedButton("Click the L2 Vertebra")
+      self.l2Button.setVisible(False)
+      self.anatomyLayout.addWidget(self.l2Button)
+
+      self.l3Button = self.createWrappedButton("Click the L3 Vertebra")
+      self.l3Button.setVisible(False)
       self.anatomyLayout.addWidget(self.l3Button)
 
-      # --- BUTTON 2: L4 (Hidden initially) ---
-      self.l4Button = self.createWrappedButton("Click the L4")
+      self.l4Button = self.createWrappedButton("Click the L4 Vertebra")
       self.l4Button.setVisible(False)
       self.anatomyLayout.addWidget(self.l4Button)
 
-      # --- BUTTON 3: L5 (Hidden initially) ---
-      self.l5Button = self.createWrappedButton("Click the L5")
+      self.l5Button = self.createWrappedButton("Click the L5 Vertebra")
       self.l5Button.setVisible(False)
       self.anatomyLayout.addWidget(self.l5Button)
 
-      # --- BUTTON 4: Ligamentum Flavum (Hidden initially) ---
-      self.ligamentumButton = self.createWrappedButton("Click the Ligamentum Flavum")
-      self.ligamentumButton.setVisible(False)
-      self.anatomyLayout.addWidget(self.ligamentumButton)
-
-      # --- BUTTON 5: Spinal Cord (Hidden initially) ---
-      self.spinalCordButton = self.createWrappedButton("Click where the solid spinal cord ends")
-      self.spinalCordButton.setVisible(False)
-      self.anatomyLayout.addWidget(self.spinalCordButton)
+      self.togglePostureButton = self.createWrappedButton("Toggle Posture (Neutral / Extended)")
+      self.togglePostureButton.setVisible(False)
+      # Give it a nice blue color to stand out from the completion button
+      self.togglePostureButton.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; border-radius: 4px; padding: 4px;")
+      self.anatomyLayout.addWidget(self.togglePostureButton)
+      
+      self.anatomyCompleteButton = self.createWrappedButton("Anatomy Review Completed!\nClick to begin procedure.")
+      self.anatomyCompleteButton.setVisible(False)
+      self.anatomyCompleteButton.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; border-radius: 4px; padding: 4px;")
+      self.anatomyLayout.addWidget(self.anatomyCompleteButton)
       
       self.anatomyLayout.addStretch(1)
   
@@ -1134,165 +1358,6 @@ class LumbarTutorGuidelet(Guidelet):
     
     self.procedureLayout.addStretch(1)
 
-  def setupResultsPanel(self):
-    logging.debug('setupResultsPanel')
-
-    self.resultsCollapsibleButton.setProperty('collapsedHeight', 20)
-    self.resultsCollapsibleButton.text = "Results"
-    self.sliceletPanelLayout.addWidget(self.resultsCollapsibleButton)
-
-    self.resultsCollapsibleLayout = qt.QVBoxLayout(self.resultsCollapsibleButton)
-    self.resultsCollapsibleLayout.setContentsMargins(12, 4, 4, 4)
-    self.resultsCollapsibleLayout.setSpacing(4)
-
-    self.resultsControlsLayout = qt.QFormLayout(self.resultsCollapsibleButton)
-    self.resultsCollapsibleLayout.addLayout(self.resultsControlsLayout)
-
-    self.recordingComboBox = slicer.qMRMLNodeComboBox()
-    self.recordingComboBox.nodeTypes = ["vtkMRMLSequenceBrowserNode"]
-    self.recordingComboBox.removeEnabled = False
-    self.recordingComboBox.addEnabled = False
-    self.recordingComboBox.renameEnabled = False
-    self.recordingComboBox.setMRMLScene(slicer.mrmlScene)
-    self.resultsControlsLayout.addRow("Select recording: ",self.recordingComboBox)
-    self.recordingComboBox.connect('currentNodeChanged(bool)',self.onRecordingNodeSelected)
-
-    self.recordingPlayWidget = slicer.qMRMLSequenceBrowserPlayWidget()
-    self.resultsControlsLayout.addRow(self.recordingPlayWidget)
-
-    self.calculateMetricsButton = qt.QPushButton("Calculate metrics")
-    self.resultsControlsLayout.addRow(self.calculateMetricsButton)
-    self.calculateMetricsButton.connect('clicked(bool)', self.onCalculateMetricsButtonClicked)
-
-    self.metricsTableWidget = slicer.qSlicerMetricsTableWidget()
-    self.metricsTableWidget.setExpandHeightToContents(False)
-    self.metricsTableWidget.setShowMetricRoles(True)
-    self.metricsTableWidget.setMRMLScene(slicer.mrmlScene)
-    self.metricsTableWidget.setMetricsTableSelectionRowVisible( False )
-    self.resultsCollapsibleLayout.addWidget(qt.QLabel()) # Blank row for spacing between table and buttons.
-    self.resultsCollapsibleLayout.addWidget(self.metricsTableWidget)
-    self.resultsCollapsibleLayout.addWidget(qt.QLabel()) # Blank row for spacing between table and buttons.
-    
-    self.captureVideoButton = qt.QPushButton( "Capture video" )
-    self.resultsControlsLayout.addRow(self.captureVideoButton)
-    self.captureVideoButton.connect('clicked(bool)', self.onCaptureVideoButtonClicked)
-
-
-  def onRecordingNodeSelected(self):
-    selectedNode = self.recordingComboBox.currentNode()
-    self.stopSequenceBrowserPlayback()
-    self.setPlaybackRealtime(selectedNode)
-    self.recordingPlayWidget.setMRMLSequenceBrowserNode(selectedNode)
-
-
-  def setupMetrics(self, metricsDirectory):
-    # Import all of the metric scripts and create the metric instances
-    peLogic = slicer.modules.perkevaluator.logic()
-    if (peLogic is None):
-      logging.error( "LumbarTutorLogic::setupMetrics could not find Perk Evaluator logic." )
-      return
-
-    self.perkEvaluatorNode = slicer.vtkMRMLPerkEvaluatorNode()
-    self.perkEvaluatorNode.SetScene(slicer.mrmlScene)
-    slicer.mrmlScene.AddNode(self.perkEvaluatorNode)
-
-    self.metricsTableNode = slicer.vtkMRMLTableNode()
-    self.metricsTableNode.SetScene(slicer.mrmlScene)
-    slicer.mrmlScene.AddNode(self.metricsTableNode)
-
-    self.perkEvaluatorNode.SetMetricsTableID( self.metricsTableNode.GetID() )
-    # These metrics are all shared
-    # No need to create an instance - an instance is already created automatically
-    # TODO: This behaviour may be changed. Metrics will eventually be non-shared by default.
-
-    # Remove all pervasive metric instances and just recreate the ones for the relevant transforms
-    metricInstanceNodes = slicer.mrmlScene.GetNodesByClass( "vtkMRMLMetricInstanceNode" )
-    for i in range( metricInstanceNodes.GetNumberOfItems() ):
-      node = metricInstanceNodes.GetItemAsObject( i )
-      pervasive = peLogic.GetMetricPervasive( node.GetAssociatedMetricScriptID() )
-      needleTipRole = node.GetRoleID( "Any", slicer.vtkMRMLMetricInstanceNode.TransformRole ) == self.needleTipToNeedle.GetID()
-      probeRole = node.GetRoleID( "Any", slicer.vtkMRMLMetricInstanceNode.TransformRole ) == self.probeToReference.GetID()
-      if ( pervasive and not needleTipRole and not probeRole ):
-        self.perkEvaluatorNode.RemoveMetricInstanceID( node.GetID() )
-
-
-    # Generic needle-plane distance/angle computation
-    needlePlaneDistanceAngleScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "NeedlePlaneDistanceAngle.py" ), "Python Metric Script", {})
-
-    # Generic in-action computation
-    inActionScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "InAction.py" ), "Python Metric Script", {})
-
-    # Max/average needle-tip to ultrasound plane distance/angle
-    maximumNeedlePlaneDistanceScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "MaximumNeedlePlaneDistance.py" ), "Python Metric Script", {})
-    averageNeedlePlaneDistanceScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "AverageNeedlePlaneDistance.py" ), "Python Metric Script", {})
-    maximumNeedlePlaneAngleScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "MaximumNeedlePlaneAngle.py" ), "Python Metric Script", {})
-    averageNeedlePlaneAngleScript = slicer.util.loadNodeFromFile( os.path.join( metricsDirectory, "AverageNeedlePlaneAngle.py" ), "Python Metric Script", {})
-
-    # Everything should be OK with the same roles
-    peLogic.SetMetricInstancesRolesToID( self.perkEvaluatorNode, self.needleTipToNeedle.GetID(), "Needle", slicer.vtkMRMLMetricInstanceNode.TransformRole )
-    peLogic.SetMetricInstancesRolesToID( self.perkEvaluatorNode, self.imageToProbe.GetID(), "Ultrasound", slicer.vtkMRMLMetricInstanceNode.TransformRole )
-    peLogic.SetMetricInstancesRolesToID( self.perkEvaluatorNode, self.tissueModel.GetID(), "Tissue", slicer.vtkMRMLMetricInstanceNode.AnatomyRole )
-    peLogic.SetMetricInstancesRolesToID( self.perkEvaluatorNode, self.metricsTableNode.GetID(), "Parameter", slicer.vtkMRMLMetricInstanceNode.AnatomyRole )
-
-
-  def onCalculateMetricsButtonClicked(self):
-    sequenceBrowserNode = self.recordingComboBox.currentNode()
-    self.perkEvaluatorNode.SetTrackedSequenceBrowserNodeID( sequenceBrowserNode.GetID() )
-
-    peLogic = slicer.modules.perkevaluator.logic()
-    if (peLogic is None):
-      logging.error( "LumbarTutorLogic::onCalculateMetricsButtonClicked could not find Perk Evaluator logic." )
-      return
-
-    peLogic.ComputeMetrics(self.perkEvaluatorNode)
-    
-    
-  def onCaptureVideoButtonClicked(self):
-    sequenceBrowserNode = self.recordingComboBox.currentNode()
-    masterSequenceNode = sequenceBrowserNode.GetMasterSequenceNode()
-
-    try:
-      import ScreenCapture
-      scLogic = ScreenCapture.ScreenCaptureLogic()
-    except:
-      logging.error( "LumbarTutorLogic::onCaptureVideoButtonClicked could not find Screen Capture logic." )
-      return
-      
-    try:
-      threeDViewNode = slicer.app.layoutManager().threeDWidget( 0 ).threeDView().mrmlViewNode()
-    except:
-      logging.error( "LumbarTutorLogic::onCaptureVideoButtonClicked could not find 3D view node Capture logic." )
-      return
-    
-    sequenceBrowserNode.Modified() # Force update the images
-    # Make some adjustments to the views
-    self.ultrasound_Ultrasound.GetDisplayNode().SetAutoWindowLevel( 0 )
-    self.ultrasound_Ultrasound.GetDisplayNode().SetWindowLevelMinMax( 0, 120 )
-    self.webcam_Webcam.GetDisplayNode().SetAutoWindowLevel( 0 )
-    self.webcam_Webcam.GetDisplayNode().SetWindowLevelMinMax( 0, 256 )
-    # These aren't strictly necessary, but nice to confirm
-    self.displayImageInSliceViewer(self.ultrasound_Ultrasound.GetID(), "Red", False, 180)
-    self.displayImageInSliceViewer(self.webcam_Webcam.GetID(), "Yellow", True, 0)
-    
-    # Parameters for capturing    
-    startIndex = 0
-    endIndex = masterSequenceNode.GetNumberOfDataNodes()
-    steps = endIndex - startIndex
-    outputDir = self.parameterNode.GetParameter('SavedScenesDirectory')
-    imageFileNamePattern = scLogic.getRandomFilePattern()
-    captureAllViews = True
-
-    # Parameters for conversion to video
-    fps = steps / ( float( masterSequenceNode.GetNthIndexValue( steps - 1 ) ) - float( masterSequenceNode.GetNthIndexValue( 0 ) ) )
-    videoFormat = scLogic.videoFormatPresets[ 2 ][ "extraVideoOptions" ] # mpeg format
-    videoName = sequenceBrowserNode.GetName() + ".mp4"
-
-    # Capture and create the video
-    scLogic.captureSequence( threeDViewNode, sequenceBrowserNode, startIndex, endIndex, steps, outputDir, imageFileNamePattern, captureAllViews )
-    scLogic.createVideo( fps, videoFormat, outputDir, imageFileNamePattern, videoName )
-    scLogic.deleteTemporaryFiles( outputDir, imageFileNamePattern, steps )
-
-
   def onCalibrationSetupPanelToggled(self, toggled):
     if toggled == False:
       return
@@ -1300,17 +1365,6 @@ class LumbarTutorGuidelet(Guidelet):
     logging.debug('onCalibrationSetupPanelToggled: {0}'.format(toggled))
     self.navigationView = self.parameterNode.GetParameter( "CalibrationLayout" )
     self.updateNavigationView()
-
-
-  def onUltrasoundPanelToggled(self, toggled):
-    logging.debug('onUltrasoundPanelToggled: {0}'.format(toggled))
-    self.navigationView = self.parameterNode.GetParameter( "ProcedureLayout" )
-    self.updateNavigationView()
-
-    # The user may want to freeze the image (disconnect) to make contouring easier.
-    # Disable automatic ultrasound image auto-fit when the user unfreezes (connect)
-    # to avoid zooming out of the image.
-    self.fitUltrasoundImageToViewOnConnect = not toggled
 
   def onProcedureTabToggled(self, toggled):
     if toggled:
@@ -1388,31 +1442,6 @@ class LumbarTutorGuidelet(Guidelet):
       currSequenceBrowserNode = sequenceBrowserNodes.GetItemAsObject( i )
       currSequenceBrowserNode.SetPlaybackActive(False)
       self.setPlaybackRealtime(currSequenceBrowserNode)
-    
-      
-  def onResultsPanelToggled(self, toggled):
-
-    self.navigationView = self.parameterNode.GetParameter( "ResultsLayout" )
-    self.updateNavigationView()
-    logging.debug('onResultsPanelToggled')
-    
-    if ( self.ultrasound.startStopRecordingButton.checked ):
-      self.ultrasound.startStopRecordingButton.click() # Simulate the user clicking the stop button before the panel is toggled
-      # This will stop all the recording etc.
-      
-    # Also stop the playback        
-    self.stopSequenceBrowserPlayback()
-
-    if ( self.connectorNode is None or self.webcamConnectorNode is None ):
-      return
-
-    # If we are in the "Results" panel, stop the connection so we can replay
-    if ( toggled ):
-      self.connectorNode.Stop()
-      self.webcamConnectorNode.Stop()
-    else:
-      self.connectorNode.Start()
-      self.webcamConnectorNode.Start()
 
 
   def setupSliceUSMarkers(self, sliceName):
