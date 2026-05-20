@@ -16,7 +16,7 @@ class LumbarTutor(GuideletLoadable):
     self.parent.title = "Lumbar Tutor"
     self.parent.categories = [ "Training" ]
     self.parent.dependencies = []
-    self.parent.contributors = ["Matthew S. Holden (Perk Lab, Queen's University)"]
+    self.parent.contributors = ["Matthew S. Holden (Perk Lab, Queen's University), Robert Policelli (Perk Lab, Queen's University)"]
     self.parent.helpText = """  """
     self.parent.acknowledgementText = """  """
 
@@ -121,6 +121,10 @@ class LumbarTutorGuidelet(Guidelet):
 
     Guidelet.__init__(self, parent, logic, configurationName)
     logging.debug('LumbarTutorGuidelet.__init__')
+    self.sequenceBrowserModule = slicer.modules.sequencebrowser if hasattr(slicer.modules, 'sequencebrowser') else None
+    
+    if not self.sequenceBrowserModule:
+        print("Warning: SequenceBrowser module not found. Recording may be disabled.")
     
     # Set up the webcam connection
     # TODO: Guidelet is not really designed to handle multiple connector nodes, but we need one for the ultrasound and one for the webcam
@@ -156,8 +160,9 @@ class LumbarTutorGuidelet(Guidelet):
     # 1. Initialize the base Guidelet panels (this safely boots up core logic)
     featurePanelList = Guidelet.createFeaturePanels(self)
     
-    # 2. Hide the default Ultrasound tab so it doesn't show up on screen
+    # 2. Hide the default tabs so they don't show up on screen
     self.ultrasoundCollapsibleButton.setVisible(False)
+    self.advancedCollapsibleButton.setVisible(False) # <-- THIS COMPLETELY HIDES THE OLD SETTINGS TAB
 
     # 3. Setup Anatomy Tab (Top)
     self.anatomyCollapsibleButton = ctk.ctkCollapsibleButton()
@@ -177,7 +182,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.anatomyCollapsibleButton.setProperty('collapsed', False)
     self.calibrationCollapsibleButton.setProperty('collapsed', True) 
     self.procedureCollapsibleButton.setProperty('collapsed', True)   
-    self.advancedCollapsibleButton.setProperty('collapsed', True)    # Starts CLOSED
+    
     return featurePanelList
 
 
@@ -424,6 +429,13 @@ class LumbarTutorGuidelet(Guidelet):
         "L5": self.loadOrCreateModel('L5Model_Ext', '1308055L5FLEX.stl', (0.9, 0.9, 0.7))
     }
     
+    self.spinalCanalModel = self.loadOrCreateModel('SpinalCanalModel', 'curved_spinal_canal.stl', (1.0, 0.85, 0.2)) # Yellow color
+    if self.spinalCanalModel and self.spinalCanalModel.GetDisplayNode():
+        self.spinalCanalModel.GetDisplayNode().SetVisibility(False)
+        # Ensure it moves with the rest of the spine when tilted
+        if hasattr(self, 'spineTiltTransform'):
+            self.spinalCanalModel.SetAndObserveTransformNodeID(self.spineTiltTransform.GetID())
+
     # Hide the extended models initially so they don't overlap the neutral ones
     for modelNode in self.extendedAnatomyModels.values():
       if modelNode and modelNode.GetDisplayNode():
@@ -479,7 +491,47 @@ class LumbarTutorGuidelet(Guidelet):
     self.interactionObserver = interactionNode.AddObserver(slicer.vtkMRMLInteractionNode.InteractionModeChangedEvent, self.enforceCrosshairs)
     # Wait half a second for the 3D viewer to finish loading, then trigger the tab logic
     qt.QTimer.singleShot(500, lambda: self.onAnatomyTabToggled(True))
+
+    self.userID = "UnknownUser" 
+    self.createLoginPage()
+    # Temporarily hide the main procedure panel and show the login panel instead
+    self.sliceletDockWidget.setWidget(self.loginPanel)
   
+  def createLoginPage(self):
+    self.loginPanel = qt.QFrame()
+    self.loginPanelLayout = qt.QVBoxLayout(self.loginPanel)
+
+    self.loginButtonLayout = qt.QFormLayout()
+
+    self.spacer = qt.QLabel('\n\n\n\n\n\n')
+    self.loginButtonLayout.addWidget(self.spacer)
+    
+    self.userIDLineEdit = qt.QLineEdit('User ID')
+    self.loginButtonLayout.addWidget(self.userIDLineEdit)
+
+    self.loginPushButton = qt.QPushButton('Login')
+    self.loginButtonLayout.addWidget(self.loginPushButton)
+    self.loginPushButton.connect('clicked()', self.onLoginClicked)
+
+    self.loginPanelLayout.addLayout(self.loginButtonLayout)
+
+  def onLoginClicked(self):
+    if self.userIDLineEdit.text != '' and self.userIDLineEdit.text != 'User ID':
+      self.userID = self.userIDLineEdit.text
+      self.sliceletDockWidget.setWindowTitle('Lumbar Tutor - User: ' + self.userID)
+    else:
+      self.userID = "UnknownUser"
+      self.sliceletDockWidget.setWindowTitle('Lumbar Tutor - UnknownUser')
+
+    # Swap the dock widget content back to the main procedure UI
+    self.sliceletDockWidget.setWidget(self.sliceletPanel)
+    
+  def onLogoutButtonClicked(self):
+    self.sliceletDockWidget.setWindowTitle('Lumbar Tutor')
+    self.sliceletDockWidget.setWidget(self.loginPanel)
+    self.userIDLineEdit.setText('User ID')
+    self.userID = "UnknownUser"
+
   def loadOrCreateModel(self, nodeName, fileName, color):
     """Helper to load a model from Resources, or create a blank one if the file is missing."""
     try:
@@ -585,6 +637,34 @@ class LumbarTutorGuidelet(Guidelet):
       self.exitButton.disconnect('clicked()', self.onExitButtonClicked)
     except AttributeError:
       pass
+
+    try:
+      self.topRecordButton.disconnect('clicked()', self.onTopRecordButtonClicked)
+      self.logoutButton.disconnect('clicked()', self.onLogoutButtonClicked)
+      self.loginPushButton.disconnect('clicked()', self.onLoginClicked)
+    except AttributeError:
+      pass
+
+    try:
+      self.topRecordButton.disconnect('clicked()', self.onTopRecordButtonClicked)
+      self.logoutButton.disconnect('clicked()', self.onLogoutButtonClicked)
+      self.loginPushButton.disconnect('clicked()', self.onLoginClicked)
+      self.settingsButton.disconnect('clicked()', self.onOpenSettingsClicked)
+      
+      # Settings Window Disconnects
+      self.showFullSlicerInterfaceButton.disconnect('clicked()', self.onShowFullSlicerInterfaceClicked)
+      self.showGuideletFullscreenButton.disconnect('clicked()', self.onShowGuideletFullscreenButton)
+      self.saveSceneButton.disconnect('clicked()', self.onSaveSceneClicked)
+      self.saveDirectoryLineEdit.disconnect('currentPathChanged(QString)', self.onSaveDirectoryPreferencesChanged)
+      self.closeSettingsButton.disconnect('clicked()', self.settingsWidget.hide)
+    except AttributeError:
+      pass
+
+    try:
+      self.procedureStartRecordingButton.disconnect('clicked()', self.onProcedureStartRecordingClicked)
+      self.procedureStopRecordingButton.disconnect('clicked()', self.onProcedureStopRecordingClicked)
+    except AttributeError:
+      pass
     
     # Keyboard shortcuts
     self.startStopShortcutPlus.disconnect('activated()', self.ultrasound.startStopRecordingButton.click )
@@ -600,6 +680,7 @@ class LumbarTutorGuidelet(Guidelet):
       if hasattr(self, 'postureTextActor'):
         self.postureTextActor.SetVisibility(True)
         slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
+      self.tiltSpineModels(0)
       self.calibrationCollapsibleButton.setProperty('collapsed', True)
       self.procedureCollapsibleButton.setProperty('collapsed', True)
       
@@ -612,6 +693,11 @@ class LumbarTutorGuidelet(Guidelet):
           neu.GetDisplayNode().SetVisibility(not is_ext)
         if ext and ext.GetDisplayNode(): 
           ext.GetDisplayNode().SetVisibility(is_ext)
+
+      # [ADD THIS BLOCK] If they already found L5, show the canal again when re-opening the tab
+      if getattr(self, 'currentAnatomyTarget', "") == "Done":
+        if hasattr(self, 'spinalCanalModel') and self.spinalCanalModel.GetDisplayNode():
+            self.spinalCanalModel.GetDisplayNode().SetVisibility(True)
           
       if not getattr(self, 'anatomyReviewCompleted', False):
         
@@ -628,7 +714,7 @@ class LumbarTutorGuidelet(Guidelet):
         if interactionNode:
           interactionNode.SetCurrentInteractionMode(slicer.vtkMRMLInteractionNode.ViewTransform)
           
-    else:
+    else: # Tab is closing
       # Turn off the crosshairs if the user closes the Anatomy tab
       interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
       if interactionNode:
@@ -641,6 +727,10 @@ class LumbarTutorGuidelet(Guidelet):
       for modelNode in getattr(self, 'extendedAnatomyModels', {}).values():
         if modelNode and modelNode.GetDisplayNode():
           modelNode.GetDisplayNode().SetVisibility(False)
+
+      # [ADD THIS BLOCK] Hide the spinal canal when the tab closes
+      if hasattr(self, 'spinalCanalModel') and self.spinalCanalModel.GetDisplayNode():
+          self.spinalCanalModel.GetDisplayNode().SetVisibility(False)
           
       if hasattr(self, 'postureTextActor'):
         self.postureTextActor.SetVisibility(False)
@@ -691,37 +781,57 @@ class LumbarTutorGuidelet(Guidelet):
 
     targetModel = self.anatomyModels.get(self.currentAnatomyTarget)
 
-    if self.isClickOnModel(clickPosition_RAS, targetModel):
+    # Increased tolerance slightly to account for Slicer's surface-snapping math
+    if self.isClickOnModel(clickPosition_RAS, targetModel, tolerance_mm=15.0):
       print(f"Correct! User successfully identified {self.currentAnatomyTarget}.")
       slicer.util.showStatusMessage(f"Correct: {self.currentAnatomyTarget} identified!", 3000)
       
-      # Advance the UI based on what was just successfully clicked
+      # --- FIXED: Route 3D clicks directly to your button functions! ---
+      # This ensures the STL click shares the exact same "brain" as the UI buttons.
       if self.currentAnatomyTarget == "L1":
-        self.advanceAnatomyStep(self.l1Button, self.l2Button)
-        self.currentAnatomyTarget = "L2"
-        
+        self.onL1Clicked()
       elif self.currentAnatomyTarget == "L2":
-        self.advanceAnatomyStep(self.l2Button, self.l3Button)
-        self.currentAnatomyTarget = "L3"
-        
+        self.onL2Clicked()
       elif self.currentAnatomyTarget == "L3":
-        self.advanceAnatomyStep(self.l3Button, self.l4Button)
-        self.currentAnatomyTarget = "L4"
-        
+        self.onL3Clicked()
       elif self.currentAnatomyTarget == "L4":
-        self.advanceAnatomyStep(self.l4Button, self.l5Button)
-        self.currentAnatomyTarget = "L5"
-        
+        self.onL4Clicked()
       elif self.currentAnatomyTarget == "L5":
-        self.advanceAnatomyStep(self.l5Button, [self.togglePostureButton, self.anatomyCompleteButton])
-        slicer.util.showStatusMessage("Anatomy Review Complete!", 4000)
-        interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
-        interactionNode.SetCurrentInteractionMode(slicer.vtkMRMLInteractionNode.ViewTransform)
+        self.onL5Clicked()
         
     else:
       slicer.util.showStatusMessage(f"Incorrect. Please click the {self.currentAnatomyTarget}.", 3000)
 
+  def tiltSpineModels(self, angle_degrees):
+    """Tilts the entire spine by rotating around the X-axis (Right/Left)."""
+    try:
+      self.spineTiltTransform = slicer.util.getNode('SpineTiltTransform')
+    except slicer.util.MRMLNodeNotFoundException:
+      self.spineTiltTransform = slicer.vtkMRMLLinearTransformNode()
+      self.spineTiltTransform.SetName('SpineTiltTransform')
+      slicer.mrmlScene.AddNode(self.spineTiltTransform)
 
+    # 1. Create a mathematical transform for the rotation
+    transform = vtk.vtkTransform()
+    
+    # In Slicer's RAS coordinate system, the X-axis is Right-to-Left. 
+    # Rotating around X tilts models anteriorly/posteriorly (forward/backward).
+    # (Note: If your specific STLs tilt forward instead of backward, just change this to -angle_degrees)
+    transform.RotateX(angle_degrees) 
+    
+    # 2. Apply it to our Slicer Transform Node
+    self.spineTiltTransform.SetMatrixTransformToParent(transform.GetMatrix())
+
+    # 3. Attach all neutral models to this new transform
+    for model in getattr(self, 'anatomyModels', {}).values():
+      if model:
+        model.SetAndObserveTransformNodeID(self.spineTiltTransform.GetID())
+
+    # 4. Attach the Extended models' base transform to this new transform.
+    # This preserves your exact distance alignment while tilting the whole group!
+    if hasattr(self, 'extendedAlignmentTransform') and self.extendedAlignmentTransform:
+      self.extendedAlignmentTransform.SetAndObserveTransformNodeID(self.spineTiltTransform.GetID())
+    
   def isClickOnModel(self, clickPosition_RAS, modelNode, tolerance_mm=10.0): # <--- Increased to 10.0
     """Uses VTK math to check if a 3D coordinate is physically touching a specific model."""
     if not modelNode or not modelNode.GetPolyData() or modelNode.GetPolyData().GetNumberOfPoints() == 0:
@@ -748,23 +858,10 @@ class LumbarTutorGuidelet(Guidelet):
     return distance_mm <= tolerance_mm
   
   def onAdvanceStepShortcut(self):
-    """Triggered when the user presses 'p'. Finds the active step and clicks it."""
+    """Triggered when the user presses 'p'. Only advances Procedure steps."""
     
-    # --- Check if Anatomy Tab is open ---
-    if not self.anatomyCollapsibleButton.collapsed:
-      
-      anatomyButtons = [
-        self.l1Button, self.l2Button, self.l3Button, self.l4Button, self.l5Button, self.anatomyCompleteButton
-      ]
-      
-      for btn in anatomyButtons:
-        # Find the first button that is both visible and hasn't been clicked yet
-        if btn.isVisible() and btn.isEnabled():
-          btn.click() # Virtually click it!
-          break # Stop after clicking one
-          
     # --- Check if Procedure Tab is open ---
-    elif not self.procedureCollapsibleButton.collapsed:
+    if not self.procedureCollapsibleButton.collapsed:
       procedureButtons = [
         self.step1Button, self.step2Button, self.step3Button, self.step4Button, self.step5Button,
         self.insStep1Button, self.insStep2Button, self.insStep3Button, self.insStep4Button,
@@ -775,6 +872,9 @@ class LumbarTutorGuidelet(Guidelet):
         if btn.isVisible() and btn.isEnabled():
           btn.click() # Virtually click it!
           break
+    else:
+      # If they press 'p' in Anatomy, do nothing or show a message
+      slicer.util.showStatusMessage("Please identify the anatomy by clicking the 3D model.", 2000)
     
   # ==========================================
   # ANATOMY CLICK LOGIC
@@ -797,13 +897,23 @@ class LumbarTutorGuidelet(Guidelet):
 
   def onL5Clicked(self):
     print("User is attempting to click L5...")
-    self.advanceAnatomyStep(self.l5Button, [self.togglePostureButton, self.anatomyCompleteButton])
-    slicer.util.showStatusMessage("Anatomy Review Complete!", 4000)
+    
+    # --- ADDED: Tilt the spine 45 degrees backwards immediately ---
+    self.tiltSpineModels(45)
+    
+    # 1. Only reveal the toggle posture button
+    self.advanceAnatomyStep(self.l5Button, self.togglePostureButton)
+    slicer.util.showStatusMessage("L5 Found! Please toggle the posture to continue.", 4000)
     
     self.currentAnatomyTarget = "Done" 
     
+    if hasattr(self, 'spinalCanalModel') and self.spinalCanalModel.GetDisplayNode():
+        self.spinalCanalModel.GetDisplayNode().SetVisibility(True)
+    
+    # 2. Drop the crosshairs so they can freely click the UI
     interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
     interactionNode.SetCurrentInteractionMode(slicer.vtkMRMLInteractionNode.ViewTransform)
+  
   
   def onTogglePostureClicked(self):
     """Swaps the visibility of the neutral and extended spine STLs and updates the screen text."""
@@ -819,7 +929,6 @@ class LumbarTutorGuidelet(Guidelet):
       if ext_model and ext_model.GetDisplayNode():
         ext_model.GetDisplayNode().SetVisibility(self.isExtendedPosture)
         
-    # --- UPDATE THE TEXT OVERLAY ---
     if hasattr(self, 'postureTextActor'):
       if self.isExtendedPosture:
         self.postureTextActor.SetInput("Posture: FLEXED")
@@ -831,8 +940,21 @@ class LumbarTutorGuidelet(Guidelet):
       # Force Slicer to instantly redraw the 3D window to show the text!
       slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
 
+    if getattr(self, 'currentAnatomyTarget', "") == "Done" and not self.anatomyCompleteButton.isVisible():
+      self.anatomyCompleteButton.setVisible(True)
+      
+      # 1. Force the layout to move it to the top
+      layout = self.anatomyCompleteButton.parentWidget().layout()
+      if layout:
+          layout.removeWidget(self.anatomyCompleteButton)
+          layout.insertWidget(0, self.anatomyCompleteButton)
+      
+      slicer.app.processEvents()
+
   def onAnatomyCompleteClicked(self):
     """Automatically closes Anatomy, hides models, and opens the Calibration tab."""
+    slicer.util.showStatusMessage("Anatomy Review Complete!", 4000)
+
     self.anatomyCollapsibleButton.setProperty('collapsed', True)
     self.calibrationCollapsibleButton.setProperty('collapsed', False)
     
@@ -901,7 +1023,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.advanceProcedureStep(self.compStep1Button, self.compStep2Button)
 
   def onCompStep2Clicked(self):
-    self.advanceProcedureStep(self.compStep2Button, self.compStep3Button)
+    self.advanceProcedureStep(self.compStep2Button, self.procedureStopRecordingButton)
 
   def onCompStep3Clicked(self):
     self.advanceProcedureStep(self.compStep3Button, None)
@@ -972,11 +1094,9 @@ class LumbarTutorGuidelet(Guidelet):
 
     # 1. Create the layout
     self.topPanelLayout = qt.QGridLayout()
-
-    # 2. CRITICAL FIX: Insert it at the very top of the main Guidelet panel (Index 0)
     self.sliceletPanelLayout.insertLayout(0, self.topPanelLayout)
 
-    # 3. Load Button
+    # 2. Load Button
     self.loadButton = qt.QPushButton()
     self.loadButton.setIcon(qt.QIcon(qt.QApplication.style().standardIcon(qt.QStyle.SP_DialogOpenButton)))
     self.loadButton.setMinimumWidth(buttonMinWidth)
@@ -984,7 +1104,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.topPanelLayout.addWidget(self.loadButton, 0, 0)
     self.loadButton.connect('clicked()', self.onLoadButtonClicked)
 
-    # 4. Save Button
+    # 3. Save Button
     self.saveButton = qt.QPushButton()
     self.saveButton.setIcon(qt.QIcon(qt.QApplication.style().standardIcon(qt.QStyle.SP_DialogSaveButton)))
     self.saveButton.setMinimumWidth(buttonMinWidth)
@@ -992,16 +1112,129 @@ class LumbarTutorGuidelet(Guidelet):
     self.topPanelLayout.addWidget(self.saveButton, 0, 1)
     self.saveButton.connect('clicked()', self.saveAllRecordings)
 
-    # 5. Exit Button
+    # --- ADDED: Settings Button ---
+    self.settingsButton = qt.QPushButton("Settings")
+    self.settingsButton.setMinimumWidth(buttonMinWidth)
+    self.settingsButton.toolTip = 'Open Settings Menu'
+    self.topPanelLayout.addWidget(self.settingsButton, 0, 2)
+    self.settingsButton.connect('clicked()', self.onOpenSettingsClicked)
+
+    # 4. Record Button
+    self.topRecordButton = qt.QPushButton("Start Recording")
+    self.topRecordButton.setCheckable(True)
+    self.topRecordButton.toolTip = 'Start/Stop Sequence Browser Recording'
+    self.topPanelLayout.addWidget(self.topRecordButton, 0, 3)
+    self.topRecordButton.connect('clicked()', self.onTopRecordButtonClicked)
+
+    # 5. Logout Button
+    self.logoutButton = qt.QPushButton("Logout")
+    self.logoutButton.setMinimumWidth(buttonMinWidth)
+    self.logoutButton.toolTip = 'Logout User'
+    self.topPanelLayout.addWidget(self.logoutButton, 0, 4)
+    self.logoutButton.connect('clicked()', self.onLogoutButtonClicked)
+
+    # 6. Exit Button
     self.exitButton = qt.QPushButton()
     self.exitButton.toolTip = 'Exit'
     self.exitButton.setMinimumWidth(buttonMinWidth)
     self.exitButton.setIcon(qt.QIcon(qt.QApplication.style().standardIcon(qt.QStyle.SP_BrowserStop)))
-    self.topPanelLayout.addWidget(self.exitButton, 0, 2)
+    self.topPanelLayout.addWidget(self.exitButton, 0, 5)
     self.exitButton.connect('clicked()', self.onExitButtonClicked)
 
     # Push the buttons to the left side
-    self.topPanelLayout.setColumnStretch(3, 1)
+    self.topPanelLayout.setColumnStretch(6, 1)
+
+    # --- Initialize the Settings Window ---
+    self.initSettingsDialog()
+
+  def initSettingsDialog(self):
+    """Builds the Settings pop-up window once in the background with full Guidelet features."""
+    mainWindow = slicer.util.mainWindow()
+    self.settingsWidget = qt.QDialog(mainWindow)
+    self.settingsWidget.setWindowTitle('Lumbar Tutor Settings')
+    self.settingsWidget.setModal(True) 
+    self.settingsWidget.setMinimumWidth(450)
+
+    # Main layout for the settings window
+    self.settingsLayout = qt.QVBoxLayout(self.settingsWidget)
+    self.settingsFormLayout = qt.QFormLayout()
+    self.settingsLayout.addLayout(self.settingsFormLayout)
+
+    # 1. UI Toggle: Show Full Slicer Interface
+    self.showFullSlicerInterfaceButton = qt.QPushButton("Show 3D Slicer user interface")
+    self.settingsFormLayout.addRow(self.showFullSlicerInterfaceButton)
+    self.showFullSlicerInterfaceButton.connect('clicked()', self.onShowFullSlicerInterfaceClicked)
+    self.showFullSlicerInterfaceButton.connect('clicked()', self.settingsWidget.hide) # Auto-close menu
+
+    # 2. UI Toggle: Show Guidelet Fullscreen
+    self.showGuideletFullscreenButton = qt.QPushButton("Show Guidelet in full screen")
+    self.settingsFormLayout.addRow(self.showGuideletFullscreenButton)
+    self.showGuideletFullscreenButton.connect('clicked()', self.onShowGuideletFullscreenButton)
+    self.showGuideletFullscreenButton.connect('clicked()', self.settingsWidget.hide) # Auto-close menu
+
+    # 3. Save Scene Button (Saves the entire Slicer workspace, not just the recording)
+    self.saveSceneButton = qt.QPushButton("Save Guidelet scene (.mrb)")
+    self.settingsFormLayout.addRow(self.saveSceneButton)
+    self.saveSceneButton.connect('clicked()', self.onSaveSceneClicked)
+    self.saveSceneButton.connect('clicked()', self.settingsWidget.hide)
+
+    # 4. Save Directory Selector
+    self.saveDirectoryLineEdit = ctk.ctkPathLineEdit()
+    self.saveDirectoryLineEdit.filters = ctk.ctkPathLineEdit.Dirs
+    self.saveDirectoryLineEdit.options = ctk.ctkPathLineEdit.ShowDirsOnly
+    
+    # Pre-fill with current parameter
+    savedScenesDirectory = self.parameterNode.GetParameter('SavedScenesDirectory')
+    if savedScenesDirectory:
+        self.saveDirectoryLineEdit.currentPath = savedScenesDirectory
+        
+    self.settingsFormLayout.addRow("Save Directory:", self.saveDirectoryLineEdit)
+    
+    # Trigger an update when the user selects a new folder
+    self.saveDirectoryLineEdit.connect('currentPathChanged(QString)', self.onSaveDirectoryPreferencesChanged)
+    
+    # 5. Add vertical spacing
+    self.settingsLayout.addStretch(1)
+
+    # 6. Close Button
+    self.closeSettingsButton = qt.QPushButton("Close")
+    self.closeSettingsButton.connect('clicked()', self.settingsWidget.hide)
+    self.settingsLayout.addWidget(self.closeSettingsButton)
+
+  def onSaveDirectoryPreferencesChanged(self, newPath):
+    """Updates the parameter node and user settings when the save directory is changed."""
+    # Tell the active session about the new path
+    self.parameterNode.SetParameter('SavedScenesDirectory', newPath)
+    
+    # Tell Slicer to remember this preference the next time you open the module
+    self.logic.updateSettings({'SavedScenesDirectory': newPath}, self.configurationName)
+    print(f"Save directory updated to: {newPath}")
+
+  def onOpenSettingsClicked(self):
+    """Shows the Settings window when the top bar button is clicked."""
+    # Ensure the directory path is visually up-to-date just in case it changed
+    savedScenesDirectory = self.parameterNode.GetParameter('SavedScenesDirectory')
+    if savedScenesDirectory:
+        self.saveDirectoryLineEdit.currentPath = savedScenesDirectory
+        
+    self.settingsWidget.show()
+
+  def onTopRecordButtonClicked(self):
+    if self.topRecordButton.isChecked():
+      # Visually indicate recording state
+      self.topRecordButton.setText("Stop Recording")
+      self.topRecordButton.setStyleSheet("background-color: #f44336; color: white; font-weight: bold;") 
+      
+      # Start recording
+      self.needleTutorSequenceBrowserNode = slicer.vtkMRMLSequenceBrowserNode()
+      self.startSequenceBrowserRecording(self.needleTutorSequenceBrowserNode)      
+    else:
+      # Reset visuals
+      self.topRecordButton.setText("Start Recording")
+      self.topRecordButton.setStyleSheet("")
+      
+      # Stop recording
+      self.stopSequenceBrowserRecording(self.needleTutorSequenceBrowserNode)
 
   def onLoadButtonClicked(self):
     io = slicer.app.ioManager()
@@ -1164,16 +1397,48 @@ class LumbarTutorGuidelet(Guidelet):
 
 
   def saveAllRecordings(self):
+    import os # Ensure os is available
+
     savedScenesDirectory = self.parameterNode.GetParameter('SavedScenesDirectory')
     if ( not os.path.exists(savedScenesDirectory) ):
       os.makedirs(savedScenesDirectory) # Make the directory if it doesn't already exist
     
+    # Grab the user ID, default to UnknownUser if none is set
+    currentUserId = getattr(self, 'userID', 'UnknownUser')
+    
     recordingCollection = slicer.mrmlScene.GetNodesByClass( "vtkMRMLSequenceBrowserNode" )
     for nodeNumber in range( recordingCollection.GetNumberOfItems() ):
       browserNode = recordingCollection.GetItemAsObject( nodeNumber )
-      filename = browserNode.GetName() + "-" + time.strftime("%Y%m%d-%H%M%S") + os.extsep + "sqbr"
-      filename = os.path.join( savedScenesDirectory, filename )
-      slicer.util.saveNode( browserNode, filename )
+      base_node_name = browserNode.GetName() # Typically "Recording"
+      
+      # 1. Define what the start of our file looks like
+      file_prefix = currentUserId + "-" + base_node_name + "-"
+      
+      # 2. Scan the directory to find the highest existing number for this user
+      max_number = 0
+      existing_files = os.listdir(savedScenesDirectory)
+      
+      for f in existing_files:
+        if f.startswith(file_prefix) and f.endswith(".sqbr"):
+          # Remove the prefix and the extension to isolate the number
+          name_without_ext = os.path.splitext(f)[0]
+          number_string = name_without_ext.replace(file_prefix, "")
+          
+          # If it's a valid number, check if it's the highest one we've seen
+          if number_string.isdigit():
+            num = int(number_string)
+            if num > max_number:
+              max_number = num
+              
+      # 3. Calculate the next logical number
+      next_number = max_number + 1
+      
+      # 4. Generate the final sequential filename
+      filename = file_prefix + str(next_number) + os.extsep + "sqbr"
+      full_filepath = os.path.join( savedScenesDirectory, filename )
+      
+      slicer.util.saveNode( browserNode, full_filepath )
+      print("Successfully saved recording to: " + full_filepath)
 
 
   def setupAnatomyPanel(self):
@@ -1206,22 +1471,27 @@ class LumbarTutorGuidelet(Guidelet):
       # --- Updated to explicitly match your L1-L5 STLs! ---
       self.l1Button = self.createWrappedButton("Click the L1 Vertebra")
       self.anatomyLayout.addWidget(self.l1Button)
+      self.l1Button.setEnabled(False)
 
       self.l2Button = self.createWrappedButton("Click the L2 Vertebra")
       self.l2Button.setVisible(False)
       self.anatomyLayout.addWidget(self.l2Button)
+      self.l2Button.setEnabled(False)
 
       self.l3Button = self.createWrappedButton("Click the L3 Vertebra")
       self.l3Button.setVisible(False)
       self.anatomyLayout.addWidget(self.l3Button)
+      self.l3Button.setEnabled(False)
 
       self.l4Button = self.createWrappedButton("Click the L4 Vertebra")
       self.l4Button.setVisible(False)
       self.anatomyLayout.addWidget(self.l4Button)
+      self.l4Button.setEnabled(False)
 
       self.l5Button = self.createWrappedButton("Click the L5 Vertebra")
       self.l5Button.setVisible(False)
       self.anatomyLayout.addWidget(self.l5Button)
+      self.l5Button.setEnabled(False)
 
       self.togglePostureButton = self.createWrappedButton("Toggle Posture (Neutral / Extended)")
       self.togglePostureButton.setVisible(False)
@@ -1256,44 +1526,54 @@ class LumbarTutorGuidelet(Guidelet):
     return btn
   
   def advanceProcedureStep(self, currentButton, nextButtons=None):
-    """Disables current step, reveals next step(s), and auto-scrolls to the bottom."""
-    # 1. Disable the current button (locks it in place without changing its text)
+    """Disables current step, turns it green, and forces new steps to the absolute top."""
+    # 1. Disable the current button and apply the green style
     currentButton.setEnabled(False)
-    
-    # 2. Reveal the next button(s)
+    currentButton.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; border-radius: 4px;")
+
+    # 2. Reveal the next button(s) and snap them to the top
     if nextButtons is not None:
-      # This allows the function to handle a single button OR a list of multiple buttons
       if not isinstance(nextButtons, list):
         nextButtons = [nextButtons]
-      for btn in nextButtons:
-        btn.setVisible(True)
+
+      # Process in reverse so multiple buttons stay in logical order
+      for btn in reversed(nextButtons):
         
-    # 3. Force Slicer to instantly calculate the new height of the Procedure tab
+        layout = btn.parentWidget().layout()
+        if layout:
+            layout.removeWidget(btn)    # 1. Pick the button up (Qt implicitly hides it here)
+            layout.insertWidget(0, btn) # 2. Drop it exactly at the top (Index 0)
+            
+        btn.setVisible(True) # 3. Safely reveal it now that it is firmly placed!
+
     slicer.app.processEvents()
-    
-    # 4. Auto-scroll to the absolute bottom to push the previous steps up!
-    scrollBar = self.procedureScrollArea.verticalScrollBar()
-    scrollBar.setValue(scrollBar.maximum)
   
   def advanceAnatomyStep(self, currentButton, nextButtons=None):
-    """Disables current Anatomy step, reveals next step(s), and auto-scrolls to the bottom."""
+    """Disables current step, turns it green, and pushes new steps to the top of the layout."""
+    # 1. Disable the current button and apply the green style
     currentButton.setEnabled(False)
-    
+    currentButton.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; border-radius: 4px;")
+
+    # 2. Reveal the next button(s) and snap them to the top
     if nextButtons is not None:
       if not isinstance(nextButtons, list):
         nextButtons = [nextButtons]
-      for btn in nextButtons:
+
+      # Process in reverse so multiple buttons stay in logical order (e.g., Step 2 above Step 3)
+      for btn in reversed(nextButtons):
         btn.setVisible(True)
         
+        # This dynamically finds the layout the button lives in and forces it to index 0 (the top)
+        layout = btn.parentWidget().layout()
+        if layout:
+            layout.insertWidget(0, btn)
+            
     slicer.app.processEvents()
-    
-    # Auto-scroll to the bottom of the Anatomy tab
-    scrollBar = self.anatomyScrollArea.verticalScrollBar()
-    scrollBar.setValue(scrollBar.maximum)
 
   def setupProcedurePanel(self):
     import logging
     logging.debug('setupProcedurePanel')
+    
 
     self.procedureCollapsibleButton.setProperty('collapsedHeight', 20)
     self.procedureCollapsibleButton.text = "Procedure"
@@ -1317,10 +1597,15 @@ class LumbarTutorGuidelet(Guidelet):
     self.procedureLayout.setContentsMargins(12, 4, 4, 4)
     self.procedureLayout.setSpacing(4)
 
+    # 1. START RECORDING BUTTON (First Button)
+    self.procedureStartRecordingButton = self.createWrappedButton("Start Recording")
+    self.procedureLayout.addWidget(self.procedureStartRecordingButton)
+    self.procedureStartRecordingButton.connect('clicked()', self.onProcedureStartRecordingClicked)
     # ==========================================
     # PHASE 1: PRE-PROCEDURE
     # ==========================================
     self.step1Button = self.createWrappedButton("Before Begining, the patient should be positioned in the lateral decubitus position or upright leaning forward withtheir feet supported, with their back facing the clinician. The patient's hips and knees should be flexed to open up the spaces between the vertebrae.")
+    self.step1Button.setVisible(False) 
     self.procedureLayout.addWidget(self.step1Button)
 
     self.step2Button = self.createWrappedButton("Palpate the iliac crests and spinous processes L3, L4, L5")
@@ -1388,11 +1673,54 @@ class LumbarTutorGuidelet(Guidelet):
     self.compStep2Button.setVisible(False) 
     self.procedureLayout.addWidget(self.compStep2Button)
 
+    # 2. STOP RECORDING BUTTON (Second to Last Button)
+    self.procedureStopRecordingButton = self.createWrappedButton("Stop Recording")
+    self.procedureLayout.addWidget(self.procedureStopRecordingButton)
+    self.procedureStopRecordingButton.setVisible(False) # Hidden until revealed by the previous step
+    self.procedureStopRecordingButton.connect('clicked()', self.onProcedureStopRecordingClicked)
+
+    # 3. FINAL PROCEDURE BUTTON (Last Button)
+    # (Assuming you have a final button like "Procedure Complete", it should be added after the stop button)
+
     self.compStep3Button = self.createWrappedButton("End of Study")
     self.compStep3Button.setVisible(False) 
     self.procedureLayout.addWidget(self.compStep3Button)
     
     self.procedureLayout.addStretch(1)
+
+  def onProcedureStartRecordingClicked(self):
+    """Starts the recording and advances to the first actual procedure step."""
+    
+    # 1. Sync with the top toolbar button to start recording safely
+    if not self.topRecordButton.isChecked():
+        self.topRecordButton.setChecked(True)
+        try:
+            self.onTopRecordButtonClicked() # This triggers the actual Sequence Browser recording
+        except Exception as e:
+            # If Slicer throws a background recording error, print it but DON'T stop the checklist!
+            print(f"Silent recording error ignored: {e}") 
+
+    # 2. Advance the checklist 
+    self.advanceProcedureStep(self.procedureStartRecordingButton, self.step1Button)
+
+
+  def onProcedureStopRecordingClicked(self):
+    """Stops the recording, saves it, and advances to the completion step."""
+    
+    # 1. Sync with the top toolbar button to stop recording
+    if self.topRecordButton.isChecked():
+        self.topRecordButton.setChecked(False)
+        try:
+            self.onTopRecordButtonClicked() # Stops the Sequence Browser recording
+        except Exception as e:
+            print(f"Silent recording error ignored: {e}")
+
+    # --- THE FIX: Trigger the save function automatically ---
+    print("Recording stopped. Automatically saving files...")
+    self.saveAllRecordings()
+
+    # 2. Advance the checklist
+    self.advanceProcedureStep(self.procedureStopRecordingButton, self.compStep3Button)
 
   def onCalibrationSetupPanelToggled(self, toggled):
     if toggled == False:
@@ -1634,20 +1962,43 @@ class LumbarTutorGuidelet(Guidelet):
 
       
   def setPlaybackRealtime(self, browserNode):
-    try: # Update the playback fps rate
-      sequenceNode = browserNode.GetMasterSequenceNode()   
+    if not browserNode:
+        return
+        
+    try:
+      sequenceNode = browserNode.GetMasterSequenceNode()
+      if not sequenceNode:
+          return # Exit if no sequence is present
+
       numDataNodes = sequenceNode.GetNumberOfDataNodes()    
+      if numDataNodes < 2: # Cannot calculate FPS with one frame
+          return
+          
       startTime = float( sequenceNode.GetNthIndexValue( 0 ) )
       stopTime = float( sequenceNode.GetNthIndexValue( numDataNodes - 1 ) )
-      frameRate = numDataNodes / ( stopTime - startTime )
-      browserNode.SetPlaybackRateFps( frameRate )
-    except:
-      logging.debug( "setPlaybackRealtime:: ", sys.exc_info()[0] )  
+      
+      duration = stopTime - startTime
+      if duration > 0:
+          frameRate = numDataNodes / duration
+          browserNode.SetPlaybackRateFps( frameRate )
+          
+    except Exception as e:
+      # Use a safe string format to avoid the Logging error
+      logging.debug(f"setPlaybackRealtime failed: {str(e)}")
 
       
   def startSequenceBrowserRecording(self, browserNode):
     if (browserNode is None):
       return
+
+    # Use the safe utility to get the logic
+    # This will return None instead of throwing a RuntimeError if the module is missing
+    sequenceBrowserLogic = slicer.util.getModuleLogic("SequenceBrowser")
+    
+    if not sequenceBrowserLogic:
+        # Fallback: Maybe it's named differently in your specific Slicer build
+        print("SequenceBrowser logic not found via standard name. Attempting to locate...")
+        return # Exit gracefully instead of crashing
   
     # Indicate that this node was recorded, not loaded from file
     browserNode.SetName( slicer.mrmlScene.GetUniqueNameByString( "Recording" ) )
@@ -1655,8 +2006,11 @@ class LumbarTutorGuidelet(Guidelet):
     # Create and populate a sequence browser node if the recording started
     browserNode.SetScene(slicer.mrmlScene)    
     slicer.mrmlScene.AddNode(browserNode)
-    sequenceBrowserLogic = slicer.modules.sequencebrowser.logic()
-    
+    # Force Slicer to re-index the module before accessing its logic
+    sequenceBrowserLogic = slicer.modules.sequencebrowser.widgetRepresentation().self().logic() if hasattr(slicer.modules, 'sequencebrowser') else slicer.modules.sequencebrowser.logic()
+    # Alternatively, if that fails, use the direct accessor:
+    sequenceBrowserLogic = slicer.util.getModuleLogic('SequenceBrowser')
+        
     modifiedFlag = browserNode.StartModify()
     sequenceBrowserLogic.AddSynchronizedNode(None, self.needleToReference, browserNode)
     sequenceBrowserLogic.AddSynchronizedNode(None, self.probeToReference, browserNode)
