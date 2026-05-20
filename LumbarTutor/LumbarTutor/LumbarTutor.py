@@ -126,16 +126,33 @@ class LumbarTutorGuidelet(Guidelet):
     if not self.sequenceBrowserModule:
         print("Warning: SequenceBrowser module not found. Recording may be disabled.")
     
-    # Set up the webcam connection
-    # TODO: Guidelet is not really designed to handle multiple connector nodes, but we need one for the ultrasound and one for the webcam
-    # Let us create another one here for the webcam
-    # Probably the Guidelet should eventually be updated to handle these cases, as we often have tracked ultrasound and webcam anymore
+    # Setup the PLUS connectors for the webcam and depth streams. If they already exist in the scene (e.g. from a previous session), just grab them instead of creating new ones.
+
     try:
-      self.webcamConnectorNode = slicer.util.getNode('PlusWebcamConnector')
+      self.webcam1RGBConnectorNode = slicer.util.getNode('RGB1Connector')
     except slicer.util.MRMLNodeNotFoundException:
-      self.webcamConnectorNode = self.createPlusConnector( self.parameterNode.GetParameter('PlusWebcamServerHostNamePort') )
-      self.webcamConnectorNode.SetName( "PlusWebcamConnector" )
-    self.webcamConnectorNode.Start()
+      self.webcam1RGBConnectorNode = self.createRealSensePlusConnectors(1, 18949,'RGB')
+    self.webcam1RGBConnectorNode.Start()
+
+
+    try:
+      self.webcam1DEPTHConnectorNode = slicer.util.getNode('DEPTH1Connector')
+    except slicer.util.MRMLNodeNotFoundException:
+      self.webcam1DEPTHConnectorNode = self.createRealSensePlusConnectors(1, 18950, 'DEPTH')
+    self.webcam1DEPTHConnectorNode.Start()
+
+    try:
+      self.webcam0RGBConnectorNode = slicer.util.getNode('RGB0Connector')
+    except slicer.util.MRMLNodeNotFoundException:
+      self.webcam0RGBConnectorNode = self.createRealSensePlusConnectors(0, 18945,'RGB')
+    self.webcam0RGBConnectorNode.Start()
+
+    try:
+      self.webcam0DEPTHConnectorNode = slicer.util.getNode('DEPTH0Connector')
+    except slicer.util.MRMLNodeNotFoundException:
+      self.webcam0DEPTHConnectorNode = self.createRealSensePlusConnectors(0, 18948, 'DEPTH')
+    self.webcam0DEPTHConnectorNode.Start()
+
     
     moduleDirectoryPath = slicer.modules.lumbartutor.path.replace('LumbarTutor.py', '')
 
@@ -155,6 +172,12 @@ class LumbarTutorGuidelet(Guidelet):
     # Setting button open on startup.
     self.calibrationCollapsibleButton.setProperty('collapsed', True)
 
+
+    moduleDir = os.path.dirname(slicer.modules.lumbartutor.path)
+    sceneSaveDirectory = os.path.join(moduleDir, 'SavedScenes')
+    self.logic.updateSettings({'SavedScenesDirectory': sceneSaveDirectory}, self.configurationName)
+    if hasattr(self, 'parameterNode') and self.parameterNode:
+      self.parameterNode.SetParameter('SavedScenesDirectory', sceneSaveDirectory)
 
   def createFeaturePanels(self):
     # 1. Initialize the base Guidelet panels (this safely boots up core logic)
@@ -185,6 +208,19 @@ class LumbarTutorGuidelet(Guidelet):
     
     return featurePanelList
 
+  def createRealSensePlusConnectors(self,cameraNumber,port,imageType):
+    connectorNodeName = imageType + str(cameraNumber) + "Connector"
+    try:
+      realsenseConnectorNode = slicer.util.getNode(connectorNodeName)
+    except slicer.util.MRMLNodeNotFoundException:
+      # if not webcamConnectorNode:
+      realsenseConnectorNode = slicer.vtkMRMLIGTLConnectorNode()
+      realsenseConnectorNode.SetName(connectorNodeName)
+      slicer.mrmlScene.AddNode(realsenseConnectorNode)
+      hostName = "localhost"
+      realsenseConnectorNode.SetTypeClient(hostName,int(port))
+      logging.debug(connectorNodeName + ' Created')
+    return realsenseConnectorNode
 
   def __del__(self):#common
     self.cleanup()
@@ -261,12 +297,6 @@ class LumbarTutorGuidelet(Guidelet):
     logging.debug('Create transforms')    
 
     # The transforms to be received from PLUS
-    try:
-      self.probeToReference = slicer.util.getNode('ProbeToReference')
-    except slicer.util.MRMLNodeNotFoundException:
-      self.probeToReference = slicer.vtkMRMLLinearTransformNode()
-      self.probeToReference.SetName("ProbeToReference")
-      slicer.mrmlScene.AddNode(self.probeToReference)
 
     try:
       self.needleToReference = slicer.util.getNode('NeedleToReference')
@@ -274,43 +304,6 @@ class LumbarTutorGuidelet(Guidelet):
       self.needleToReference = slicer.vtkMRMLLinearTransformNode()
       self.needleToReference.SetName('NeedleToReference')
       slicer.mrmlScene.AddNode(self.needleToReference)
-
-    try:
-      self.imageToProbe = slicer.util.getNode('ImageToProbe')
-    except slicer.util.MRMLNodeNotFoundException:
-      imageToProbeFilePath = os.path.join(moduleDir, 'Resources', 'ImageToProbe.h5')
-
-      try:
-        self.imageToProbe = slicer.util.loadTransform(imageToProbeFilePath)
-        self.imageToProbe.SetName("ImageToProbe")
-      except:
-        logging.error('Could not read ImageToProbe!')
-      '''self.imageToProbe = slicer.vtkMRMLLinearTransformNode()
-      self.imageToProbe.SetName('ImageToProbe')
-      slicer.mrmlScene.AddNode(self.imageToProbe)'''
-
-    # Transforms to be computed from calibration
-    try:
-      self.probeModelToProbe = slicer.util.getNode('ProbeModelToProbe')
-    except slicer.util.MRMLNodeNotFoundException:
-      probeToReferenceFilePath = os.path.join(moduleDir, 'Resources', 'ProbeModelToProbe_L12_1.h5')
-
-      try:
-        self.probeModelToProbe = slicer.util.loadTransform(probeToReferenceFilePath)
-        self.probeModelToProbe.SetName("ProbeModelToProbe")
-      except:
-        logging.error('Could not read probe model to probe transform for Sonix L14-5!')
-
-    try:
-      self.ultrasound_flip = slicer.util.getNode('Flip2')
-    except slicer.util.MRMLNodeNotFoundException:
-      flip2FilePath = os.path.join(moduleDir, 'Resources', 'Flip2.h5')
-
-      try:
-        self.ultrasound_flip = slicer.util.loadTransform(flip2FilePath)
-        self.ultrasound_flip.SetName("Flip2")
-      except:
-        logging.error('Could not read Flip2 transform for ultrasound probe')
 
     try:
       self.needleTipToNeedle = slicer.util.getNode('NeedleTipToNeedle')
@@ -359,23 +352,7 @@ class LumbarTutorGuidelet(Guidelet):
     # Images
     logging.debug('Create images')
 
-    try:
-      self.ultrasound_Ultrasound = slicer.util.getNode('Image_Image') # Max 20 character name due to OpenIGTLink standard
-    except slicer.util.MRMLNodeNotFoundException:
-      self.ultrasound_Ultrasound = slicer.vtkMRMLScalarVolumeNode()
-      self.ultrasound_Ultrasound.SetName('Image_Image')
-      slicer.mrmlScene.AddNode(self.ultrasound_Ultrasound)
-
-    try:
-      self.webcam_Webcam = slicer.util.getNode('Webcam_Reference')
-    except slicer.util.MRMLNodeNotFoundException:
-      self.webcam_Webcam = slicer.vtkMRMLStreamingVolumeNode()
-      self.webcam_Webcam.SetName('Webcam_Reference')
-      slicer.mrmlScene.AddNode(self.webcam_Webcam)
-
-    # self.displayImageInSliceViewer(self.ultrasound_Ultrasound.GetID(), "Red", False, 180)
-    self.displayImageInSliceViewer(self.webcam_Webcam.GetID(), "Yellow", True, 0)
-    #slicer.util.getNode('vtkMRMLSliceNodeRed').SetSliceVisible(False)
+    self.webcam_Webcam = None
     
     # Load the spine "scenes"
     logging.debug('Create spine scenes')
@@ -387,23 +364,16 @@ class LumbarTutorGuidelet(Guidelet):
     # Build transform tree
     logging.debug('Set up transform tree')
 
-    self.probeToReference.SetAndObserveTransformNodeID(self.referenceToRas.GetID())
     self.needleToReference.SetAndObserveTransformNodeID(self.referenceToRas.GetID())
-    self.imageToProbe.SetAndObserveTransformNodeID(self.probeToReference.GetID())
-
-    self.probeModelToProbe.SetAndObserveTransformNodeID(self.probeToReference.GetID())
     self.needleTipToNeedle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
     self.needleModel.SetAndObserveTransformNodeID(self.needleTipToNeedle.GetID())
     
-    self.ultrasound_Ultrasound.SetAndObserveTransformNodeID(self.imageToProbe.GetID())
 
     # Ensure that the sequence browser toolbar(s) is not made visible
     sequenceBrowserToolBars = slicer.util.mainWindow().findChildren( "qMRMLSequenceBrowserToolBar" )
     for toolBar in sequenceBrowserToolBars:
       toolBar.connect('visibilityChanged(bool)', partial( self.setSequenceBrowserToolBarsVisible, False ) )
 
-    # Push the Webcam feed to the Red viewer so it appears in the split screen!
-    self.displayImageInSliceViewer(self.webcam_Webcam.GetID(), "Red", True, 0)
     # Hide the empty 2D planes floating inside the 3D viewer
     slicer.util.getNode('vtkMRMLSliceNodeRed').SetSliceVisible(False)
     slicer.util.getNode('vtkMRMLSliceNodeYellow').SetSliceVisible(False)
@@ -496,6 +466,147 @@ class LumbarTutorGuidelet(Guidelet):
     self.createLoginPage()
     # Temporarily hide the main procedure panel and show the login panel instead
     self.sliceletDockWidget.setWidget(self.loginPanel)
+
+    # Camera Setup
+    try:
+      self.webcam1RGB = slicer.util.getNode('Image1RGB_Image1RGB')
+    except slicer.util.MRMLNodeNotFoundException:
+      # if not self.webcamReference:
+      imageSpacing = [0.2, 0.2, 0.2]
+      imageData = vtk.vtkImageData()
+      imageData.SetDimensions(640, 480, 1)
+      imageData.AllocateScalars(vtk.VTK_UNSIGNED_CHAR, 1)
+      thresholder = vtk.vtkImageThreshold()
+      thresholder.SetInputData(imageData)
+      thresholder.SetInValue(0)
+      thresholder.SetOutValue(0)
+      # Create volume node
+      #self.webcam1RGB = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLStreamingVolumeNode")
+      self.webcam1RGB = slicer.vtkMRMLStreamingVolumeNode()
+      self.webcam1RGB.SetDefaultSequenceStorageNodeClassName("vtkMRMLStreamingVolumeSequenceStorageNode")
+      self.webcam1RGB.SetName('Image1RGB_Image1RGB')
+      self.webcam1RGB.SetSpacing(imageSpacing)
+      self.webcam1RGB.SetImageDataConnection(thresholder.GetOutputPort())
+      # Add volume to scene
+      slicer.mrmlScene.AddNode(self.webcam1RGB)
+      displayNode = slicer.vtkMRMLVectorVolumeDisplayNode()
+      slicer.mrmlScene.AddNode(displayNode)
+      self.webcam1RGB.SetAndObserveDisplayNodeID(displayNode.GetID())
+    self.ensureVolumeDisplayNode(self.webcam1RGB, True)
+
+    try:
+      self.webcam1DEPTH = slicer.util.getNode('Image1DEPTH_Image1DE')
+
+    except slicer.util.MRMLNodeNotFoundException:
+      # if not self.webcamReference:
+      imageSpacing = [0.2, 0.2, 0.2]
+      imageData = vtk.vtkImageData()
+      imageData.SetDimensions(640, 480, 1)
+      imageData.AllocateScalars(vtk.VTK_UNSIGNED_CHAR, 1)
+      thresholder = vtk.vtkImageThreshold()
+      thresholder.SetInputData(imageData)
+      thresholder.SetInValue(0)
+      thresholder.SetOutValue(0)
+      # Create volume node
+      #self.webcam1DEPTH = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLStreamingVolumeNode")
+      self.webcam1DEPTH = slicer.vtkMRMLStreamingVolumeNode()
+      self.webcam1DEPTH.SetDefaultSequenceStorageNodeClassName("vtkMRMLStreamingVolumeSequenceStorageNode")
+      self.webcam1DEPTH.SetName('Image1DEPTH_Image1DE')
+      self.webcam1DEPTH.SetSpacing(imageSpacing)
+      self.webcam1DEPTH.SetImageDataConnection(thresholder.GetOutputPort())
+      # Add volume to scene
+      slicer.mrmlScene.AddNode(self.webcam1DEPTH)
+      displayNode = slicer.vtkMRMLVectorVolumeDisplayNode()
+      slicer.mrmlScene.AddNode(displayNode)
+      self.webcam1DEPTH.SetAndObserveDisplayNodeID(displayNode.GetID())
+    self.ensureVolumeDisplayNode(self.webcam1DEPTH, True)
+
+    try:
+      self.webcam0RGB = slicer.util.getNode('ImageRGB_ImageRGB')
+
+    except slicer.util.MRMLNodeNotFoundException:
+      # if not self.webcamReference:
+      imageSpacing = [0.2, 0.2, 0.2]
+      imageData = vtk.vtkImageData()
+      imageData.SetDimensions(640, 480, 1)
+      imageData.AllocateScalars(vtk.VTK_UNSIGNED_CHAR, 1)
+      thresholder = vtk.vtkImageThreshold()
+      thresholder.SetInputData(imageData)
+      thresholder.SetInValue(0)
+      thresholder.SetOutValue(0)
+      # Create volume node
+      #self.webcam0RGB = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLStreamingVolumeNode")
+      self.webcam0RGB = slicer.vtkMRMLStreamingVolumeNode()
+      self.webcam0RGB.SetDefaultSequenceStorageNodeClassName("vtkMRMLStreamingVolumeSequenceStorageNode")
+      self.webcam0RGB.SetName('ImageRGB_ImageRGB')
+      self.webcam0RGB.SetSpacing(imageSpacing)
+      self.webcam0RGB.SetImageDataConnection(thresholder.GetOutputPort())
+      # Add volume to scene
+      slicer.mrmlScene.AddNode(self.webcam0RGB)
+      displayNode = slicer.vtkMRMLVectorVolumeDisplayNode()
+      slicer.mrmlScene.AddNode(displayNode)
+      self.webcam0RGB.SetAndObserveDisplayNodeID(displayNode.GetID())
+    self.ensureVolumeDisplayNode(self.webcam0RGB, True)
+
+    try:
+      self.webcam0DEPTH = slicer.util.getNode('ImageDEPTH_ImageDEPT')
+
+    except slicer.util.MRMLNodeNotFoundException:
+      # if not self.webcamReference:
+      imageSpacing = [0.2, 0.2, 0.2]
+      imageData = vtk.vtkImageData()
+      imageData.SetDimensions(640, 480, 1)
+      imageData.AllocateScalars(vtk.VTK_UNSIGNED_CHAR, 1)
+      thresholder = vtk.vtkImageThreshold()
+      thresholder.SetInputData(imageData)
+      thresholder.SetInValue(0)
+      thresholder.SetOutValue(0)
+      # Create volume node
+      #self.webcam0DEPTH = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLStreamingVolumeNode")
+      self.webcam0DEPTH = slicer.vtkMRMLStreamingVolumeNode()
+      self.webcam0DEPTH.SetDefaultSequenceStorageNodeClassName("vtkMRMLStreamingVolumeSequenceStorageNode")
+      self.webcam0DEPTH.SetName('ImageDEPTH_ImageDEPT')
+      self.webcam0DEPTH.SetSpacing(imageSpacing)
+      self.webcam0DEPTH.SetImageDataConnection(thresholder.GetOutputPort())
+      # Add volume to scene
+      slicer.mrmlScene.AddNode(self.webcam0DEPTH)
+      displayNode = slicer.vtkMRMLVectorVolumeDisplayNode()
+      slicer.mrmlScene.AddNode(displayNode)
+      self.webcam0DEPTH.SetAndObserveDisplayNodeID(displayNode.GetID())
+    self.ensureVolumeDisplayNode(self.webcam0DEPTH, True)
+    self.setupWebcamResliceDriver()
+    self.webcam_Webcam = self.webcam1RGB
+    qt.QTimer.singleShot(1000, self.printDepthImageDebugInfo)
+    qt.QTimer.singleShot(1000, self.refitWebcamSliceView)
+    qt.QTimer.singleShot(3000, self.refitWebcamSliceView)
+
+    # Set up 3D camera
+
+    layoutManager = slicer.app.layoutManager()
+    viewCount = layoutManager.threeDViewCount
+    if viewCount < 1:
+      logging.error('No 3D views found!')
+      return
+
+    self.first3dView = layoutManager.threeDWidget(0).threeDView()
+    self.firstViewNode = self.first3dView.mrmlViewNode()
+    renderer = self.first3dView.renderWindow().GetRenderers().GetItemAsObject(0)
+
+    camerasLogic = slicer.modules.cameras.logic()
+    self.sceneCamera = camerasLogic.GetViewActiveCameraNode(self.firstViewNode)
+    camera = self.sceneCamera.GetCamera()
+
+    camera.SetPosition(0.0, 800, 1400.0)  # 120 cm behind and 10 cm below neck
+    camera.SetFocalPoint(0.0, 0.0, 0.0)
+    camera.SetViewUp(0.0, 0.0, 1.0)  # Head up, looking towards A
+    camera.SetRoll(0)  # Default in Slicer
+
+    renderer.ResetCameraClippingRange()
+    self.setupClassifier()
+    metricsDirectory = os.path.join(moduleDir, os.pardir, os.pardir, "Metrics", "metrics")
+    self.setupMetrics(metricsDirectory)
+
+
   
   def createLoginPage(self):
     self.loginPanel = qt.QFrame()
@@ -578,6 +689,148 @@ class LumbarTutorGuidelet(Guidelet):
       model.CreateDefaultDisplayNodes()
       model.GetDisplayNode().SetColor(color)
       return model
+
+  def ensureVolumeDisplayNode(self, volumeNode, isVector):
+    if not volumeNode:
+      return
+
+    displayNode = volumeNode.GetDisplayNode()
+    expectedClassName = 'vtkMRMLVectorVolumeDisplayNode' if isVector else 'vtkMRMLScalarVolumeDisplayNode'
+    if displayNode and displayNode.IsA(expectedClassName):
+      return
+
+    if isVector:
+      displayNode = slicer.vtkMRMLVectorVolumeDisplayNode()
+    else:
+      displayNode = slicer.vtkMRMLScalarVolumeDisplayNode()
+    slicer.mrmlScene.AddNode(displayNode)
+    volumeNode.SetAndObserveDisplayNodeID(displayNode.GetID())
+
+  def ensureVolumeImageComponents(self, volumeNode, componentCount):
+    if not volumeNode:
+      return
+
+    imageData = volumeNode.GetImageData()
+    if imageData and imageData.GetNumberOfScalarComponents() == componentCount:
+      return
+
+    imageData = vtk.vtkImageData()
+    imageData.SetDimensions(640, 480, 1)
+    imageData.AllocateScalars(vtk.VTK_UNSIGNED_CHAR, componentCount)
+    imageData.GetPointData().GetScalars().Fill(0)
+    volumeNode.SetAndObserveImageData(imageData)
+
+  def applyDepthColorMap(self, volumeNode):
+    displayNode = volumeNode.GetDisplayNode() if volumeNode else None
+    if not displayNode:
+      return
+
+    colorNode = None
+    for colorNodeName in ['ColdToHotRainbow', 'Rainbow', 'vtkMRMLColorTableNodeFileColdToHotRainbow.txt']:
+      try:
+        colorNode = slicer.util.getNode(colorNodeName)
+        break
+      except slicer.util.MRMLNodeNotFoundException:
+        pass
+
+    if colorNode:
+      displayNode.SetAndObserveColorNodeID(colorNode.GetID())
+    if hasattr(displayNode, 'SetAutoWindowLevel'):
+      displayNode.SetAutoWindowLevel(True)
+
+  def printDepthImageDebugInfo(self):
+    try:
+      n = slicer.util.getNode('Image1DEPTH_Image1DE')
+      img = n.GetImageData()
+      if not img:
+        print('Image1DEPTH_Image1DE has no image data yet.')
+        return
+      print(img.GetDimensions())
+      print(img.GetScalarTypeAsString())
+      print(img.GetNumberOfScalarComponents())
+      displayNode = n.GetDisplayNode()
+      print(displayNode.GetClassName() if displayNode else 'No display node')
+    except Exception as e:
+      print('Could not print Image1DEPTH debug info: ' + str(e))
+
+  def setupWebcamResliceDriver(self):
+    """Show the primary RGB webcam stream in the Yellow slice view."""
+    if not hasattr(self, 'webcam1RGB') or self.webcam1RGB is None:
+      try:
+        self.webcam1RGB = slicer.util.getNode('Image1RGB_Image1RGB')
+      except slicer.util.MRMLNodeNotFoundException:
+        logging.warning('Webcam RGB node not found; skipping webcam reslice driver setup.')
+        return
+
+    layoutManager = slicer.app.layoutManager()
+    yellowSlice = layoutManager.sliceWidget('Yellow')
+    if yellowSlice is None:
+      logging.warning('Yellow slice view not found; skipping webcam reslice driver setup.')
+      return
+
+    yellowSliceLogic = yellowSlice.sliceLogic()
+    yellowNode = yellowSlice.sliceView().mrmlSliceNode()
+    yellowSliceLogic.GetSliceCompositeNode().SetBackgroundVolumeID(self.webcam1RGB.GetID())
+    yellowNode.SetSliceResolutionMode(slicer.vtkMRMLSliceNode.SliceResolutionMatchVolumes)
+
+    resliceLogic = slicer.modules.volumereslicedriver.logic()
+    if resliceLogic:
+      resliceLogic.SetDriverForSlice(self.webcam1RGB.GetID(), yellowNode)
+      resliceLogic.SetModeForSlice(slicer.vtkSlicerVolumeResliceDriverLogic.MODE_TRANSVERSE, yellowNode)
+      resliceLogic.SetFlipForSlice(False, yellowNode)
+
+    yellowSliceLogic.FitSliceToAll()
+
+  def refitWebcamSliceView(self):
+    layoutManager = slicer.app.layoutManager()
+    yellowSlice = layoutManager.sliceWidget('Yellow')
+    if not yellowSlice:
+      return
+
+    yellowSliceLogic = yellowSlice.sliceLogic()
+    yellowSliceLogic.FitSliceToAll()
+
+  def setupClassifier(self, outgoing_port=18946, incoming_port=18947):
+    """Configure the optional neural-net classifier if all dependencies are present."""
+    if not hasattr(slicer.modules, 'RunNeuralNetWidget'):
+      logging.info('RunNeuralNetWidget module not found; skipping classifier setup.')
+      return
+    if not hasattr(self, 'networkPath') or not hasattr(self, 'classifierLabel'):
+      logging.info('Classifier network path or output label is not configured; skipping classifier setup.')
+      return
+
+    classifierLogic = slicer.modules.RunNeuralNetWidget.logic
+    classifierLogic.setNetworkPath(self.networkPath)
+    classifierLogic.setInputNode(self.webcam1RGB)
+    classifierLogic.setOutputType("STRING")
+    classifierLogic.setOutputNode(self.classifierLabel)
+    classifierLogic.setHostNameAndPort("localhost", incoming_port, connectionType='incoming')
+    classifierLogic.setHostNameAndPort("localhost", outgoing_port, connectionType='outgoing')
+
+  def setupMetrics(self, metricsDirectory):
+    """Configure optional Perk Evaluator metrics when the metrics UI is available."""
+    if not hasattr(slicer.modules, 'perkevaluator'):
+      logging.info('Perk Evaluator module not found; skipping metrics setup.')
+      return
+    if not hasattr(self, 'metricsTableWidget'):
+      logging.info('Metrics table widget is not configured; skipping metrics setup.')
+      return
+
+    peLogic = slicer.modules.perkevaluator.logic()
+    if peLogic is None:
+      logging.error("LumbarTutorLogic::setupMetrics could not find Perk Evaluator logic.")
+      return
+
+    self.perkEvaluatorNode = slicer.vtkMRMLPerkEvaluatorNode()
+    self.perkEvaluatorNode.SetScene(slicer.mrmlScene)
+    slicer.mrmlScene.AddNode(self.perkEvaluatorNode)
+
+    self.metricsTableNode = slicer.vtkMRMLTableNode()
+    self.metricsTableNode.SetScene(slicer.mrmlScene)
+    slicer.mrmlScene.AddNode(self.metricsTableNode)
+
+    self.perkEvaluatorNode.SetMetricsTableID(self.metricsTableNode.GetID())
+    self.metricsTableWidget.setMetricsTableNode(self.metricsTableNode)
     
   def disconnect(self):#TODO see connect
     logging.debug('LumbarTutor.disconnect()')
@@ -2013,9 +2266,17 @@ class LumbarTutorGuidelet(Guidelet):
         
     modifiedFlag = browserNode.StartModify()
     sequenceBrowserLogic.AddSynchronizedNode(None, self.needleToReference, browserNode)
-    sequenceBrowserLogic.AddSynchronizedNode(None, self.probeToReference, browserNode)
-    sequenceBrowserLogic.AddSynchronizedNode(None, self.ultrasound_Ultrasound, browserNode)
-    sequenceBrowserLogic.AddSynchronizedNode(None, self.webcam_Webcam, browserNode)
+    synchronizedNodes = [
+      self.webcam1RGB,
+      self.webcam1DEPTH,
+      self.webcam0RGB,
+      self.webcam0DEPTH,
+    ]
+    synchronizedNodeIds = set()
+    for synchronizedNode in synchronizedNodes:
+      if synchronizedNode and synchronizedNode.GetID() not in synchronizedNodeIds:
+        sequenceBrowserLogic.AddSynchronizedNode(None, synchronizedNode, browserNode)
+        synchronizedNodeIds.add(synchronizedNode.GetID())
     
     # Stop overwriting and saving changes to all nodes
     browserNode.SetRecording( None, True )

@@ -5,24 +5,7 @@
       Name="PlusServer: Intel RealSense camera "
       Description="Broadcasting acquired RGB and Depth video through PlusServer from Intel RealSense 3D camera"
 	/>
-    <Device 
-      Id="SerialDevice"
-      Type="GenericSerialDevice"
-      SerialPort="4"
-      BaudRate="9600"
-      LineEnding="0d"
->
-<DataSources>
-<DataSource Id="SerialData" Type="FieldData"/>
-</DataSources>
-<OutputChannels>
-<OutputChannel Id="FieldChannel">
-<DataSource Id="SerialData"/>
-</OutputChannel>
-</OutputChannels>
-</Device>
-
-
+  
     <Device
       Id="VideoDevice"
       Type="IntelRealSense"
@@ -32,7 +15,7 @@
         <DataSource
           Type="Video"
           Id="VideoRGB"
-          DeviceSerialNumber="025522060972"
+          DeviceSerialNumber="141722064250"
           FrameType="RGB"
           FrameSize="640 480"
           FrameRate="15"
@@ -54,7 +37,7 @@
         <DataSource
           Type="Video"
           Id="Video1RGB"
-          DeviceSerialNumber="141722064250"
+          DeviceSerialNumber="025522060972"
           FrameType="RGB"
           FrameSize="640 480"
           FrameRate="15"
@@ -64,7 +47,7 @@
         <DataSource
           Type="Video"
           Id="Video1DEPTH"
-          DeviceSerialNumber="141722064250"
+          DeviceSerialNumber="025522060972"
           FrameType="DEPTH"
           FrameSize="640 480"
           FrameRate="15"
@@ -80,45 +63,9 @@
         <OutputChannel Id="VideoStream1DEPTH" VideoDataSourceId="Video1DEPTH" />
       </OutputChannels>
     </Device>
-    <Device
-	Id="CaptureDeviceRGB"
-	Type="VirtualCapture"
-	BaseFileName="ImageRGB.mkv"
-	EnableCapturingOnStart="FALSE" >
-	<InputChannels>
-	    <InputChannel Id="VideoStreamRGB" />
-	</InputChannels>
-    </Device>
-    <Device
-	Id="CaptureDevice1RGB"
-	Type="VirtualCapture"
-	BaseFileName="Image1RGB.mkv"
-	EnableCapturingOnStart="FALSE" >
-	<InputChannels>
-	    <InputChannel Id="VideoStream1RGB" />
-	</InputChannels>
-    </Device>
-    <Device
-	Id="CaptureDeviceDEPTH"
-	Type="VirtualCapture"
-	BaseFileName="ImageDEPTH.mkv"
-	EnableCapturingOnStart="FALSE" >
-	<InputChannels>
-	    <InputChannel Id="VideoStreamDEPTH" />
-	</InputChannels>
-    </Device>
-    <Device
-	Id="CaptureDevice1DEPTH"
-	Type="VirtualCapture"
-	BaseFileName="Image1DEPTH.mkv"
-	EnableCapturingOnStart="FALSE" >
-	<InputChannels>
-	    <InputChannel Id="VideoStream1DEPTH" />
-	</InputChannels>
-    </Device>
   </DataCollection>
   
-  <PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18945" SendValidTransformsOnly="true" OutputChannelId="VideoStreamRGB">
+  <PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18949" SendValidTransformsOnly="true" OutputChannelId="VideoStreamRGB">
         <DefaultClientInfo>
             <MessageTypes>
                 <Message Type="VIDEO" />
@@ -154,7 +101,7 @@
         </DefaultClientInfo>
     </PlusOpenIGTLinkServer> 
 	
-	<PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18949" SendValidTransformsOnly="true" OutputChannelId="VideoStream1RGB">
+	<PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18945" SendValidTransformsOnly="true" OutputChannelId="VideoStream1RGB">
         <DefaultClientInfo>
             <MessageTypes>
                 <Message Type="VIDEO" />
@@ -189,22 +136,4 @@
             </VideoNames>
         </DefaultClientInfo>
     </PlusOpenIGTLinkServer>
-
-<PlusOpenIGTLinkServer 
-    MaxNumberOfIgtlMessagesToSend="1" 
-    MaxTimeSpentWithProcessingMs="50" 
-    ListeningPort="18944" 
-    LogWarningOnNoDataAvailable="false"
-    OutputChannelId="FieldChannel" >
-<DefaultClientInfo> 
-<MessageTypes> 
-<Message Type="STRING" />
-</MessageTypes>
-<StringNames>
-<String Name="SerialData" />
-</StringNames>
-</DefaultClientInfo>
-</PlusOpenIGTLinkServer>
-
-
 </PlusConfiguration>
