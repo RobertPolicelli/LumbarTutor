@@ -16,7 +16,7 @@ class LumbarTutor(GuideletLoadable):
     self.parent.title = "Lumbar Tutor"
     self.parent.categories = [ "Training" ]
     self.parent.dependencies = []
-    self.parent.contributors = ["Matthew S. Holden (Perk Lab, Queen's University), Robert Policelli (Perk Lab, Queen's University)"]
+    self.parent.contributors = ["Matthew S. Holden (Perk Lab, Queen's University), Robert Policelli (Perk Lab, Queen's University), Denesh Peramakumar (Perk Lab, Queen's University)"]
     self.parent.helpText = """  """
     self.parent.acknowledgementText = """  """
 
@@ -602,9 +602,6 @@ class LumbarTutorGuidelet(Guidelet):
     camera.SetRoll(0)  # Default in Slicer
 
     renderer.ResetCameraClippingRange()
-    self.setupClassifier()
-    metricsDirectory = os.path.join(moduleDir, os.pardir, os.pardir, "Metrics", "metrics")
-    self.setupMetrics(metricsDirectory)
 
 
   
