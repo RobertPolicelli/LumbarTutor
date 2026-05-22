@@ -790,47 +790,6 @@ class LumbarTutorGuidelet(Guidelet):
     yellowSliceLogic = yellowSlice.sliceLogic()
     yellowSliceLogic.FitSliceToAll()
 
-  def setupClassifier(self, outgoing_port=18946, incoming_port=18947):
-    """Configure the optional neural-net classifier if all dependencies are present."""
-    if not hasattr(slicer.modules, 'RunNeuralNetWidget'):
-      logging.info('RunNeuralNetWidget module not found; skipping classifier setup.')
-      return
-    if not hasattr(self, 'networkPath') or not hasattr(self, 'classifierLabel'):
-      logging.info('Classifier network path or output label is not configured; skipping classifier setup.')
-      return
-
-    classifierLogic = slicer.modules.RunNeuralNetWidget.logic
-    classifierLogic.setNetworkPath(self.networkPath)
-    classifierLogic.setInputNode(self.webcam1RGB)
-    classifierLogic.setOutputType("STRING")
-    classifierLogic.setOutputNode(self.classifierLabel)
-    classifierLogic.setHostNameAndPort("localhost", incoming_port, connectionType='incoming')
-    classifierLogic.setHostNameAndPort("localhost", outgoing_port, connectionType='outgoing')
-
-  def setupMetrics(self, metricsDirectory):
-    """Configure optional Perk Evaluator metrics when the metrics UI is available."""
-    if not hasattr(slicer.modules, 'perkevaluator'):
-      logging.info('Perk Evaluator module not found; skipping metrics setup.')
-      return
-    if not hasattr(self, 'metricsTableWidget'):
-      logging.info('Metrics table widget is not configured; skipping metrics setup.')
-      return
-
-    peLogic = slicer.modules.perkevaluator.logic()
-    if peLogic is None:
-      logging.error("LumbarTutorLogic::setupMetrics could not find Perk Evaluator logic.")
-      return
-
-    self.perkEvaluatorNode = slicer.vtkMRMLPerkEvaluatorNode()
-    self.perkEvaluatorNode.SetScene(slicer.mrmlScene)
-    slicer.mrmlScene.AddNode(self.perkEvaluatorNode)
-
-    self.metricsTableNode = slicer.vtkMRMLTableNode()
-    self.metricsTableNode.SetScene(slicer.mrmlScene)
-    slicer.mrmlScene.AddNode(self.metricsTableNode)
-
-    self.perkEvaluatorNode.SetMetricsTableID(self.metricsTableNode.GetID())
-    self.metricsTableWidget.setMetricsTableNode(self.metricsTableNode)
     
   def disconnect(self):#TODO see connect
     logging.debug('LumbarTutor.disconnect()')

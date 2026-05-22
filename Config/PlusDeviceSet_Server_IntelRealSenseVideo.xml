@@ -30,7 +30,7 @@
           FrameSize="640 480"
           FrameRate="15"
           AlignDepthStream="TRUE"
-          UseRealSenseColorizer="TRUE"
+          UseRealSenseColorizer="TRUE a"
           PortUsImageOrientation="UN"
         />
 
