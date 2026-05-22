@@ -401,6 +401,15 @@ class LumbarTutorGuidelet(Guidelet):
         "L5": self.loadOrCreateModel('L5Model_Ext', '1308055L5FLEX.stl', (0.9, 0.9, 0.7))
     }
     
+    self.nonAnatomyTabModel = self.loadOrCreateModel(
+        'NonAnatomyTabModel',
+        'LumbarShellandSpine1.stl',
+        (0.2, 0.8, 1.0)
+    )
+
+    if self.nonAnatomyTabModel and self.nonAnatomyTabModel.GetDisplayNode():
+        self.nonAnatomyTabModel.GetDisplayNode().SetVisibility(False)
+        
     self.spinalCanalModel = self.loadOrCreateModel('SpinalCanalModel', 'curved_spinal_canal.stl', (1.0, 0.85, 0.2)) # Yellow color
     if self.spinalCanalModel and self.spinalCanalModel.GetDisplayNode():
         self.spinalCanalModel.GetDisplayNode().SetVisibility(False)
@@ -894,6 +903,9 @@ class LumbarTutorGuidelet(Guidelet):
   def onAnatomyTabToggled(self, toggled):
     """Triggers when the Anatomy tab opens or closes."""
     if toggled:
+      if hasattr(self, 'nonAnatomyTabModel') and self.nonAnatomyTabModel.GetDisplayNode():
+        self.nonAnatomyTabModel.GetDisplayNode().SetVisibility(False)
+
       if hasattr(self, 'postureTextActor'):
         self.postureTextActor.SetVisibility(True)
         slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
@@ -935,6 +947,10 @@ class LumbarTutorGuidelet(Guidelet):
           interactionNode.SetCurrentInteractionMode(slicer.vtkMRMLInteractionNode.ViewTransform)
           
     else: # Tab is closing
+
+      if hasattr(self, 'nonAnatomyTabModel') and self.nonAnatomyTabModel.GetDisplayNode():
+        self.nonAnatomyTabModel.GetDisplayNode().SetVisibility(True)
+
       # Turn off the crosshairs if the user closes the Anatomy tab
       interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
       if interactionNode:
@@ -1057,7 +1073,13 @@ class LumbarTutorGuidelet(Guidelet):
 
     if hasattr(self, 'spinalCanalModel') and self.spinalCanalModel:
       self.spinalCanalModel.SetAndObserveTransformNodeID(self.spineTiltTransform.GetID())
-    
+  
+  def setNonAnatomyTabModelVisible(self, visible):
+    if hasattr(self, 'nonAnatomyTabModel') and self.nonAnatomyTabModel:
+        displayNode = self.nonAnatomyTabModel.GetDisplayNode()
+        if displayNode:
+            displayNode.SetVisibility(visible)
+            
   def isClickOnModel(self, clickPosition_RAS, modelNode, tolerance_mm=10.0): # <--- Increased to 10.0
     """Uses VTK math to check if a 3D coordinate is physically touching a specific model."""
     if not modelNode or not modelNode.GetPolyData() or modelNode.GetPolyData().GetNumberOfPoints() == 0:
