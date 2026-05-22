@@ -406,6 +406,10 @@ class LumbarTutorGuidelet(Guidelet):
         if hasattr(self, 'spineTiltTransform'):
             self.spinalCanalModel.SetAndObserveTransformNodeID(self.spineTiltTransform.GetID())
 
+    self.spinalCanalModel_Ext = self.loadOrCreateModel('SpinalCanalModel_Ext', 'curved_spinal_canal_Flex.stl', (1.0, 0.85, 0.2))
+    if self.spinalCanalModel_Ext and self.spinalCanalModel_Ext.GetDisplayNode():
+        self.spinalCanalModel_Ext.GetDisplayNode().SetVisibility(False)
+
     # Hide the extended models initially so they don't overlap the neutral ones
     for modelNode in self.extendedAnatomyModels.values():
       if modelNode and modelNode.GetDisplayNode():
@@ -903,10 +907,13 @@ class LumbarTutorGuidelet(Guidelet):
         if ext and ext.GetDisplayNode(): 
           ext.GetDisplayNode().SetVisibility(is_ext)
 
-      # [ADD THIS BLOCK] If they already found L5, show the canal again when re-opening the tab
       if getattr(self, 'currentAnatomyTarget', "") == "Done":
-        if hasattr(self, 'spinalCanalModel') and self.spinalCanalModel.GetDisplayNode():
-            self.spinalCanalModel.GetDisplayNode().SetVisibility(True)
+        if getattr(self, 'isExtendedPosture', False):
+            if hasattr(self, 'spinalCanalModel_Ext') and self.spinalCanalModel_Ext.GetDisplayNode():
+                self.spinalCanalModel_Ext.GetDisplayNode().SetVisibility(True)
+        else:
+            if hasattr(self, 'spinalCanalModel') and self.spinalCanalModel.GetDisplayNode():
+                self.spinalCanalModel.GetDisplayNode().SetVisibility(True)
           
       if not getattr(self, 'anatomyReviewCompleted', False):
         
@@ -937,9 +944,10 @@ class LumbarTutorGuidelet(Guidelet):
         if modelNode and modelNode.GetDisplayNode():
           modelNode.GetDisplayNode().SetVisibility(False)
 
-      # [ADD THIS BLOCK] Hide the spinal canal when the tab closes
       if hasattr(self, 'spinalCanalModel') and self.spinalCanalModel.GetDisplayNode():
           self.spinalCanalModel.GetDisplayNode().SetVisibility(False)
+      if hasattr(self, 'spinalCanalModel_Ext') and self.spinalCanalModel_Ext.GetDisplayNode():
+          self.spinalCanalModel_Ext.GetDisplayNode().SetVisibility(False)
           
       if hasattr(self, 'postureTextActor'):
         self.postureTextActor.SetVisibility(False)
@@ -985,8 +993,6 @@ class LumbarTutorGuidelet(Guidelet):
     self.clickCatcherNode.GetNthControlPointPosition(lastIndex, clickPosition_RAS)
     
     qt.QTimer.singleShot(10, self.clickCatcherNode.RemoveAllControlPoints)
-    if getattr(self, 'currentAnatomyTarget', "") != "Done" and not getattr(self, 'anatomyReviewCompleted', False):
-      qt.QTimer.singleShot(50, self.activateCrosshairs)
 
     targetModel = self.anatomyModels.get(self.currentAnatomyTarget)
 
@@ -1010,6 +1016,10 @@ class LumbarTutorGuidelet(Guidelet):
         
     else:
       slicer.util.showStatusMessage(f"Incorrect. Please click the {self.currentAnatomyTarget}.", 3000)
+
+    # Check if we hit L5 before deciding whether to turn crosshairs back on
+    if getattr(self, 'currentAnatomyTarget', "") != "Done" and not getattr(self, 'anatomyReviewCompleted', False):
+      qt.QTimer.singleShot(50, self.activateCrosshairs)
 
   def tiltSpineModels(self, angle_degrees):
     """Tilts the entire spine by rotating around the X-axis (Right/Left)."""
@@ -1040,6 +1050,9 @@ class LumbarTutorGuidelet(Guidelet):
     # This preserves your exact distance alignment while tilting the whole group!
     if hasattr(self, 'extendedAlignmentTransform') and self.extendedAlignmentTransform:
       self.extendedAlignmentTransform.SetAndObserveTransformNodeID(self.spineTiltTransform.GetID())
+
+    if hasattr(self, 'spinalCanalModel') and self.spinalCanalModel:
+      self.spinalCanalModel.SetAndObserveTransformNodeID(self.spineTiltTransform.GetID())
     
   def isClickOnModel(self, clickPosition_RAS, modelNode, tolerance_mm=10.0): # <--- Increased to 10.0
     """Uses VTK math to check if a 3D coordinate is physically touching a specific model."""
@@ -1061,7 +1074,6 @@ class LumbarTutorGuidelet(Guidelet):
     import math
     distance_mm = math.sqrt(dist2.get())
     
-    # --- ADD THIS DEBUG LINE ---
     print(f"Distance to target: {distance_mm:.2f} mm") 
     
     return distance_mm <= tolerance_mm
@@ -1107,8 +1119,7 @@ class LumbarTutorGuidelet(Guidelet):
   def onL5Clicked(self):
     print("User is attempting to click L5...")
     
-    # --- ADDED: Tilt the spine 45 degrees backwards immediately ---
-    self.tiltSpineModels(45)
+    self.tiltSpineModels(35)
     
     # 1. Only reveal the toggle posture button
     self.advanceAnatomyStep(self.l5Button, self.togglePostureButton)
@@ -1137,6 +1148,12 @@ class LumbarTutorGuidelet(Guidelet):
         
       if ext_model and ext_model.GetDisplayNode():
         ext_model.GetDisplayNode().SetVisibility(self.isExtendedPosture)
+    
+    if hasattr(self, 'spinalCanalModel') and self.spinalCanalModel.GetDisplayNode():
+      self.spinalCanalModel.GetDisplayNode().SetVisibility(not self.isExtendedPosture)
+      
+    if hasattr(self, 'spinalCanalModel_Ext') and self.spinalCanalModel_Ext.GetDisplayNode():
+      self.spinalCanalModel_Ext.GetDisplayNode().SetVisibility(self.isExtendedPosture)
         
     if hasattr(self, 'postureTextActor'):
       if self.isExtendedPosture:
@@ -1295,6 +1312,9 @@ class LumbarTutorGuidelet(Guidelet):
     for ext_model in self.extendedAnatomyModels.values():
       if ext_model:
         ext_model.SetAndObserveTransformNodeID(self.extendedAlignmentTransform.GetID())
+    
+    if hasattr(self, 'spinalCanalModel_Ext') and self.spinalCanalModel_Ext:
+      self.spinalCanalModel_Ext.SetAndObserveTransformNodeID(self.extendedAlignmentTransform.GetID())
         
     print(f"Successfully registered extended models to neutral L5. Shifted by: X:{offsetX:.1f}, Y:{offsetY:.1f}, Z:{offsetZ:.1f} mm")
 
@@ -1321,7 +1341,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.topPanelLayout.addWidget(self.saveButton, 0, 1)
     self.saveButton.connect('clicked()', self.saveAllRecordings)
 
-    # --- ADDED: Settings Button ---
+    # --- Settings Button ---
     self.settingsButton = qt.QPushButton("Settings")
     self.settingsButton.setMinimumWidth(buttonMinWidth)
     self.settingsButton.toolTip = 'Open Settings Menu'
