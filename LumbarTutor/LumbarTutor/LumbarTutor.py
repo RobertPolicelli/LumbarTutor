@@ -118,6 +118,7 @@ class LumbarTutorGuidelet(Guidelet):
   def __init__(self, parent, logic, configurationName='Default'):
     self.calibrationCollapsibleButton = None
     self.resultsCollapsibleButton = None
+    self.needleToReferenceObserver = None
 
     Guidelet.__init__(self, parent, logic, configurationName)
     logging.debug('LumbarTutorGuidelet.__init__')
@@ -367,6 +368,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.needleToReference.SetAndObserveTransformNodeID(self.referenceToRas.GetID())
     self.needleTipToNeedle.SetAndObserveTransformNodeID(self.needleToReference.GetID())
     self.needleModel.SetAndObserveTransformNodeID(self.needleTipToNeedle.GetID())
+    self.startNeedleTrackingDisplay()
     
 
     # Ensure that the sequence browser toolbar(s) is not made visible
@@ -843,6 +845,8 @@ class LumbarTutorGuidelet(Guidelet):
         interactionNode.RemoveObserver(self.interactionObserver)
     except AttributeError:
       pass
+
+    self.stopNeedleTrackingDisplay()
 
     try:
       self.loadButton.disconnect('clicked()', self.onLoadButtonClicked)
@@ -1497,6 +1501,10 @@ class LumbarTutorGuidelet(Guidelet):
     self.viewAlignmentButton = qt.QPushButton('3D View Alignment')
     self.viewAlignmentButton.setCheckable(False)
     self.calibrationLayout.addRow(self.viewAlignmentButton)
+
+    self.emPositionLabel = qt.QLabel("Needle: --")
+    self.emPositionLabel.setToolTip("Live NeedleToReference EM tracking position")
+    self.calibrationLayout.addRow("EM position:", self.emPositionLabel)
     
     self.countdownLabel = qt.QLabel()
     self.calibrationLayout.addRow(self.countdownLabel)
@@ -1506,6 +1514,47 @@ class LumbarTutorGuidelet(Guidelet):
     self.pivotSamplingTimer.setSingleShot(True)
     
     self.isSpinCalibration = False
+
+
+  def startNeedleTrackingDisplay(self):
+    if not hasattr(self, 'needleToReference') or self.needleToReference is None:
+      return
+
+    self.stopNeedleTrackingDisplay()
+    self.needleToReferenceObserver = self.needleToReference.AddObserver(
+      slicer.vtkMRMLTransformNode.TransformModifiedEvent,
+      self.onNeedleTransformModified
+    )
+    self.updateNeedleTrackingDisplay()
+
+
+  def stopNeedleTrackingDisplay(self):
+    if getattr(self, 'needleToReferenceObserver', None) is None:
+      return
+    try:
+      self.needleToReference.RemoveObserver(self.needleToReferenceObserver)
+    except (AttributeError, RuntimeError):
+      pass
+    self.needleToReferenceObserver = None
+
+
+  def onNeedleTransformModified(self, caller, event):
+    self.updateNeedleTrackingDisplay()
+
+
+  def updateNeedleTrackingDisplay(self):
+    if not hasattr(self, 'emPositionLabel') or not hasattr(self, 'needleToReference'):
+      return
+
+    matrix = vtk.vtkMatrix4x4()
+    if not self.needleToReference.GetMatrixTransformToParent(matrix):
+      self.emPositionLabel.setText("Needle: unavailable")
+      return
+
+    x = matrix.GetElement(0, 3)
+    y = matrix.GetElement(1, 3)
+    z = matrix.GetElement(2, 3)
+    self.emPositionLabel.setText("Needle: X={0:.1f}  Y={1:.1f}  Z={2:.1f} mm".format(x, y, z))
 
 
   def onNeedleCalibrationClicked(self, toggled):
