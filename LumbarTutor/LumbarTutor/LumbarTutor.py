@@ -163,7 +163,7 @@ class LumbarTutorGuidelet(Guidelet):
       self.cameraCommandConnectorNode.SetName('CameraCommandConnector')
       slicer.mrmlScene.AddNode(self.cameraCommandConnectorNode)
       hostName = "localhost"
-      self.cameraCommandConnectorNode.SetTypeServer(18949)
+      self.cameraCommandConnectorNode.SetTypeServer(18947)
       logging.debug('CameraCommandConnector Created')
     self.cameraCommandConnectorNode.Start()
     
@@ -498,6 +498,7 @@ class LumbarTutorGuidelet(Guidelet):
       self.cameraCommandText = slicer.util.getNode('CameraCommandText')
     except slicer.util.MRMLNodeNotFoundException:
       self.cameraCommandText = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTextNode", "CameraCommandText")
+      self.cameraCommandText.SetEncoding(3)
       self.cameraCommandText.SetText("")
     self.cameraCommandConnectorNode.RegisterOutgoingMRMLNode(self.cameraCommandText)
 
@@ -2369,7 +2370,7 @@ class LumbarTutorGuidelet(Guidelet):
       self.needleTutorSequenceBrowserNode = slicer.vtkMRMLSequenceBrowserNode()
       #self.startSequenceBrowserRecording(self.needleTutorSequenceBrowserNode)    
       self.fileName = self.userIDLineEdit.text + "-" + time.strftime("%Y%m%d-%H%M%S")
-      cameraCommand = "START"+"    "+  self.fileName
+      cameraCommand = "START"+"    "+  str(os.path.join(self.parameterNode.GetParameter('SavedScenesDirectory'),self.fileName))
       self.cameraCommandText.SetText( cameraCommand )
       self.topRecordButton.setText("Stop Recording")
       self.topRecordButton.setStyleSheet("background-color: #f44336; color: white; font-weight: bold;") 
