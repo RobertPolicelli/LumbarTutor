@@ -6,6 +6,7 @@ from Guidelet import GuideletLoadable, GuideletLogic, GuideletTest, GuideletWidg
 from Guidelet import Guidelet
 import logging
 import time
+import os
 
 class LumbarTutor(GuideletLoadable):
   """Uses GuideletLoadable class, available at:
@@ -128,7 +129,7 @@ class LumbarTutorGuidelet(Guidelet):
         print("Warning: SequenceBrowser module not found. Recording may be disabled.")
     
     # Setup the PLUS connectors for the webcam and depth streams. If they already exist in the scene (e.g. from a previous session), just grab them instead of creating new ones.
-
+    '''
     try:
       self.webcam1RGBConnectorNode = slicer.util.getNode('RGB1Connector')
     except slicer.util.MRMLNodeNotFoundException:
@@ -153,7 +154,18 @@ class LumbarTutorGuidelet(Guidelet):
     except slicer.util.MRMLNodeNotFoundException:
       self.webcam0DEPTHConnectorNode = self.createRealSensePlusConnectors(0, 18948, 'DEPTH')
     self.webcam0DEPTHConnectorNode.Start()
+    '''
 
+    try:
+      self.cameraCommandConnectorNode = slicer.util.getNode('CameraCommandConnector')
+    except slicer.util.MRMLNodeNotFoundException:
+      self.cameraCommandConnectorNode = slicer.vtkMRMLIGTLConnectorNode()
+      self.cameraCommandConnectorNode.SetName('CameraCommandConnector')
+      slicer.mrmlScene.AddNode(self.cameraCommandConnectorNode)
+      hostName = "localhost"
+      self.cameraCommandConnectorNode.SetTypeServer(18949)
+      logging.debug('CameraCommandConnector Created')
+    self.cameraCommandConnectorNode.Start()
     
     moduleDirectoryPath = slicer.modules.lumbartutor.path.replace('LumbarTutor.py', '')
 
@@ -482,6 +494,14 @@ class LumbarTutorGuidelet(Guidelet):
     # Temporarily hide the main procedure panel and show the login panel instead
     self.sliceletDockWidget.setWidget(self.loginPanel)
 
+    try:
+      self.cameraCommandText = slicer.util.getNode('CameraCommandText')
+    except slicer.util.MRMLNodeNotFoundException:
+      self.cameraCommandText = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTextNode", "CameraCommandText")
+      self.cameraCommandText.SetText("")
+    self.cameraCommandConnectorNode.RegisterOutgoingMRMLNode(self.cameraCommandText)
+
+    '''
     # Camera Setup
     try:
       self.webcam1RGB = slicer.util.getNode('Image1RGB_Image1RGB')
@@ -593,7 +613,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.webcam_Webcam = self.webcam1RGB
     qt.QTimer.singleShot(1000, self.printDepthImageDebugInfo)
     qt.QTimer.singleShot(1000, self.refitWebcamSliceView)
-    qt.QTimer.singleShot(3000, self.refitWebcamSliceView)
+    qt.QTimer.singleShot(3000, self.refitWebcamSliceView)'''
 
     # Set up 3D camera
 
@@ -766,6 +786,7 @@ class LumbarTutorGuidelet(Guidelet):
       print('Could not print Image1DEPTH debug info: ' + str(e))
 
   def setupWebcamResliceDriver(self):
+    return
     """Show the primary RGB webcam stream in the Yellow slice view."""
     if not hasattr(self, 'webcam1RGB') or self.webcam1RGB is None:
       try:
@@ -865,14 +886,14 @@ class LumbarTutorGuidelet(Guidelet):
       pass
 
     try:
-      self.topRecordButton.disconnect('clicked()', self.onTopRecordButtonClicked)
+      self.topRecordButton.disconnect('clicked()', self.onStartStopRecordingClicked)
       self.logoutButton.disconnect('clicked()', self.onLogoutButtonClicked)
       self.loginPushButton.disconnect('clicked()', self.onLoginClicked)
     except AttributeError:
       pass
 
     try:
-      self.topRecordButton.disconnect('clicked()', self.onTopRecordButtonClicked)
+      self.topRecordButton.disconnect('clicked()', self.onStartStopRecordingClicked)
       self.logoutButton.disconnect('clicked()', self.onLogoutButtonClicked)
       self.loginPushButton.disconnect('clicked()', self.onLoginClicked)
       self.settingsButton.disconnect('clicked()', self.onOpenSettingsClicked)
@@ -1379,7 +1400,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.topRecordButton.setCheckable(True)
     self.topRecordButton.toolTip = 'Start/Stop Sequence Browser Recording'
     self.topPanelLayout.addWidget(self.topRecordButton, 0, 3)
-    self.topRecordButton.connect('clicked()', self.onTopRecordButtonClicked)
+    self.topRecordButton.connect('clicked()', self.onStartStopRecordingClicked)
 
     # 5. Logout Button
     self.logoutButton = qt.QPushButton("Logout")
@@ -1696,8 +1717,7 @@ class LumbarTutorGuidelet(Guidelet):
       camera0.GetCamera().SetClippingRange( CAMERA_CLIPPING_RANGE )      
 
 
-  def saveAllRecordings(self):
-    import os # Ensure os is available
+  def saveAllRecordings(self): # Ensure os is available
 
     savedScenesDirectory = self.parameterNode.GetParameter('SavedScenesDirectory')
     if ( not os.path.exists(savedScenesDirectory) ):
@@ -1995,7 +2015,7 @@ class LumbarTutorGuidelet(Guidelet):
     if not self.topRecordButton.isChecked():
         self.topRecordButton.setChecked(True)
         try:
-            self.onTopRecordButtonClicked() # This triggers the actual Sequence Browser recording
+            self.onStartStopRecordingClicked() # This triggers the actual Sequence Browser recording
         except Exception as e:
             # If Slicer throws a background recording error, print it but DON'T stop the checklist!
             print(f"Silent recording error ignored: {e}") 
@@ -2011,7 +2031,7 @@ class LumbarTutorGuidelet(Guidelet):
     if self.topRecordButton.isChecked():
         self.topRecordButton.setChecked(False)
         try:
-            self.onTopRecordButtonClicked() # Stops the Sequence Browser recording
+            self.onStartStopRecordingClicked() # Stops the Sequence Browser recording
         except Exception as e:
             print(f"Silent recording error ignored: {e}")
 
@@ -2293,7 +2313,7 @@ class LumbarTutorGuidelet(Guidelet):
 
     # Use the safe utility to get the logic
     # This will return None instead of throwing a RuntimeError if the module is missing
-    sequenceBrowserLogic = slicer.util.getModuleLogic("SequenceBrowser")
+    sequenceBrowserLogic = slicer.modules.sequences.logic()
     
     if not sequenceBrowserLogic:
         # Fallback: Maybe it's named differently in your specific Slicer build
@@ -2307,13 +2327,13 @@ class LumbarTutorGuidelet(Guidelet):
     browserNode.SetScene(slicer.mrmlScene)    
     slicer.mrmlScene.AddNode(browserNode)
     # Force Slicer to re-index the module before accessing its logic
-    sequenceBrowserLogic = slicer.modules.sequencebrowser.widgetRepresentation().self().logic() if hasattr(slicer.modules, 'sequencebrowser') else slicer.modules.sequencebrowser.logic()
+    #sequenceBrowserLogic = slicer.modules.sequences.widgetRepresentation().self().logic() if hasattr(slicer.modules, 'sequencebrowser') else slicer.modules.sequencebrowser.logic()
     # Alternatively, if that fails, use the direct accessor:
-    sequenceBrowserLogic = slicer.util.getModuleLogic('SequenceBrowser')
+    sequenceBrowserLogic = slicer.modules.sequences.logic()
         
     modifiedFlag = browserNode.StartModify()
     sequenceBrowserLogic.AddSynchronizedNode(None, self.needleToReference, browserNode)
-    synchronizedNodes = [
+    '''synchronizedNodes = [
       self.webcam1RGB,
       self.webcam1DEPTH,
       self.webcam0RGB,
@@ -2323,7 +2343,7 @@ class LumbarTutorGuidelet(Guidelet):
     for synchronizedNode in synchronizedNodes:
       if synchronizedNode and synchronizedNode.GetID() not in synchronizedNodeIds:
         sequenceBrowserLogic.AddSynchronizedNode(None, synchronizedNode, browserNode)
-        synchronizedNodeIds.add(synchronizedNode.GetID())
+        synchronizedNodeIds.add(synchronizedNode.GetID())'''
     
     # Stop overwriting and saving changes to all nodes
     browserNode.SetRecording( None, True )
@@ -2345,8 +2365,18 @@ class LumbarTutorGuidelet(Guidelet):
 
     
   def onStartStopRecordingClicked(self):    
-    if self.ultrasound.startStopRecordingButton.isChecked():
+    if self.topRecordButton.isChecked():
       self.needleTutorSequenceBrowserNode = slicer.vtkMRMLSequenceBrowserNode()
-      self.startSequenceBrowserRecording(self.needleTutorSequenceBrowserNode)      
+      #self.startSequenceBrowserRecording(self.needleTutorSequenceBrowserNode)    
+      self.fileName = self.userIDLineEdit.text + "-" + time.strftime("%Y%m%d-%H%M%S")
+      cameraCommand = "START"+"    "+  self.fileName
+      self.cameraCommandText.SetText( cameraCommand )
+      self.topRecordButton.setText("Stop Recording")
+      self.topRecordButton.setStyleSheet("background-color: #f44336; color: white; font-weight: bold;") 
+
     else:
-      self.stopSequenceBrowserRecording(self.needleTutorSequenceBrowserNode)
+      #self.stopSequenceBrowserRecording(self.needleTutorSequenceBrowserNode)
+      self.cameraCommandText.SetText( "STOP" )
+      self.topRecordButton.setText("Start Recording")
+      self.topRecordButton.setStyleSheet("") 
+      
