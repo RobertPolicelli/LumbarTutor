@@ -260,33 +260,29 @@ class LumbarTutorGuidelet(Guidelet):
     self.calibrationCollapsibleButton.connect('toggled(bool)', self.onCalibrationSetupPanelToggled)
     self.procedureCollapsibleButton.connect('toggled(bool)', self.onProcedureTabToggled)
     self.anatomyCollapsibleButton.connect('toggled(bool)', self.onAnatomyTabToggled)
-    
-    self.insStep1Button.connect('clicked(bool)', self.onInsStep1Clicked)
-    self.insStep2Button.connect('clicked(bool)', self.onInsStep2Clicked)
-    self.insStep3Button.connect('clicked(bool)', self.onInsStep3Clicked)
-    self.insStep4Button.connect('clicked(bool)', self.onInsStep4Clicked)
-    
-    self.fluidStep1Button.connect('clicked(bool)', self.onFluidStep1Clicked)
-    self.fluidStep2Button.connect('clicked(bool)', self.onFluidStep2Clicked)
-    self.fluidStep3Button.connect('clicked(bool)', self.onFluidStep3Clicked)
-    self.fluidStep4Button.connect('clicked(bool)', self.onFluidStep4Clicked)
 
-    self.compStep1Button.connect('clicked(bool)', self.onCompStep1Clicked)
-    self.compStep2Button.connect('clicked(bool)', self.onCompStep2Clicked)
-    self.compStep3Button.connect('clicked(bool)', self.onCompStep3Clicked)
+    self.procedureButton1.connect('clicked(bool)', self.onProcedureButton1Clicked)
+    self.procedureButton2.connect('clicked(bool)', self.onProcedureButton2Clicked)
+    self.procedureButton3.connect('clicked(bool)', self.onProcedureButton3Clicked)
+    self.procedureButton4.connect('clicked(bool)', self.onProcedureButton4Clicked)
+    self.procedureButton5.connect('clicked(bool)', self.onProcedureButton5Clicked)
+    self.procedureButton6.connect('clicked(bool)', self.onProcedureButton6Clicked)
+    self.procedureButton7.connect('clicked(bool)', self.onProcedureButton7Clicked)
+    self.procedureButton8.connect('clicked(bool)', self.onProcedureButton8Clicked)
+    self.procedureButton9.connect('clicked(bool)', self.onProcedureButton9Clicked)
+    self.procedureButton10.connect('clicked(bool)', self.onProcedureButton10Clicked)
+    self.procedureButton11.connect('clicked(bool)', self.onProcedureButton11Clicked)
+    self.procedureButton12.connect('clicked(bool)', self.onProcedureButton12Clicked)
+    self.procedureButton13.connect('clicked(bool)', self.onProcedureButton13Clicked)
+    self.procedureButton14.connect('clicked(bool)', self.onProcedureButton14Clicked)
+    self.procedureButton15.connect('clicked(bool)', self.onProcedureButton15Clicked)
+    self.procedureButton16.connect('clicked(bool)', self.onProcedureButton16Clicked)
 
-    
     self.pivotCalibrationButton.connect('clicked(bool)', self.onNeedleCalibrationClicked)
     self.spinCalibrationButton.connect('clicked(bool)', self.onSpinCalibrationClicked)    
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
     
     self.viewAlignmentButton.connect('clicked()', self.align3DView)
-    
-    self.step1Button.connect('clicked(bool)', self.onStep1Clicked)
-    self.step2Button.connect('clicked(bool)', self.onStep2Clicked)
-    self.step3Button.connect('clicked(bool)', self.onStep3Clicked)
-    self.step4Button.connect('clicked(bool)', self.onStep4Clicked)
-    self.step5Button.connect('clicked(bool)', self.onStep5Clicked)
     
     # Keyboard shortcuts
     if ( not hasattr( self, 'startStopShortcutPlus' ) or self.startStopShortcutPlus is None ):
@@ -441,7 +437,16 @@ class LumbarTutorGuidelet(Guidelet):
     self.isExtendedPosture = False # Track which state we are currently in
 
     self.alignExtendedModelsToNeutral()
-
+    
+    self.targetSpaceL4L5 = self.loadOrCreateModel(
+        'L4_L5_TargetSpace', 
+        'L4_L5_TargetSpace.stl', 
+        (0.5, 0.5, 0.5) 
+    )
+    # Keep it hidden from the user
+    if self.targetSpaceL4L5 and self.targetSpaceL4L5.GetDisplayNode():
+        self.targetSpaceL4L5.GetDisplayNode().SetVisibility(False)
+        
     # ==========================================
     # 3D SCREEN TEXT OVERLAY
     # ==========================================
@@ -475,6 +480,47 @@ class LumbarTutorGuidelet(Guidelet):
       
       # Add it to the screen
       self.renderer.AddActor(self.postureTextActor)
+
+      # ==========================================
+      # EM POSITION 3D TEXT
+      # ==========================================
+      self.emTextActor = vtk.vtkTextActor()
+      self.emTextActor.SetInput("Depth: --")
+      self.emTextActor.GetTextProperty().SetFontSize(32) 
+      self.emTextActor.GetTextProperty().SetColor(0.2, 1.0, 0.2) 
+      self.emTextActor.GetTextProperty().BoldOn()
+      self.emTextActor.GetTextProperty().SetJustificationToRight()
+      self.emTextActor.GetTextProperty().SetVerticalJustificationToTop()
+      self.emTextActor.GetPositionCoordinate().SetCoordinateSystemToNormalizedViewport()
+      self.emTextActor.SetPosition(0.98, 0.95) 
+      self.emTextActor.SetVisibility(False) 
+      self.renderer.AddActor(self.emTextActor)
+
+      # --- NEW: ALIGNMENT 3D TEXT ---
+      self.alignmentTextActor = vtk.vtkTextActor()
+      self.alignmentTextActor.SetInput("Alignment: --")
+      self.alignmentTextActor.GetTextProperty().SetFontSize(32) 
+      self.alignmentTextActor.GetTextProperty().SetColor(0.2, 1.0, 0.2) 
+      self.alignmentTextActor.GetTextProperty().BoldOn()
+      self.alignmentTextActor.GetTextProperty().SetJustificationToRight()
+      self.alignmentTextActor.GetTextProperty().SetVerticalJustificationToTop()
+      self.alignmentTextActor.GetPositionCoordinate().SetCoordinateSystemToNormalizedViewport()
+      self.alignmentTextActor.SetPosition(0.98, 0.90) 
+      self.alignmentTextActor.SetVisibility(False) 
+      self.renderer.AddActor(self.alignmentTextActor)
+
+      # --- ANGLE 3D TEXT ---
+      self.angleTextActor = vtk.vtkTextActor()
+      self.angleTextActor.SetInput("Angle: --")
+      self.angleTextActor.GetTextProperty().SetFontSize(32) 
+      self.angleTextActor.GetTextProperty().SetColor(0.2, 1.0, 0.2) 
+      self.angleTextActor.GetTextProperty().BoldOn()
+      self.angleTextActor.GetTextProperty().SetJustificationToRight()
+      self.angleTextActor.GetTextProperty().SetVerticalJustificationToTop()
+      self.angleTextActor.GetPositionCoordinate().SetCoordinateSystemToNormalizedViewport()
+      self.angleTextActor.SetPosition(0.98, 0.85) 
+      self.angleTextActor.SetVisibility(False) 
+      self.renderer.AddActor(self.angleTextActor)
 
     # 2. Create the "Click Catcher" Markups Node
     try:
@@ -632,7 +678,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.sceneCamera = camerasLogic.GetViewActiveCameraNode(self.firstViewNode)
     camera = self.sceneCamera.GetCamera()
 
-    camera.SetPosition(0.0, 800, 1400.0)  # 120 cm behind and 10 cm below neck
+    camera.SetPosition(0.0, 800.0, 0.0)    
     camera.SetFocalPoint(0.0, 0.0, 0.0)
     camera.SetViewUp(0.0, 0.0, 1.0)  # Head up, looking towards A
     camera.SetRoll(0)  # Default in Slicer
@@ -699,7 +745,7 @@ class LumbarTutorGuidelet(Guidelet):
         # Rotate 180 degrees around the Superior/Inferior (Z) axis.
         # (If "horizontal" means something else for your specific files, 
         # you can change this to transform.RotateX(180) or transform.RotateY(180)!)
-        transform.RotateZ(180) 
+        transform.RotateX(180) 
         
         # 2. Apply the spin directly to the raw 3D mesh data
         transformFilter = vtk.vtkTransformPolyDataFilter()
@@ -836,35 +882,33 @@ class LumbarTutorGuidelet(Guidelet):
     self.l5Button.disconnect('clicked(bool)', self.onL5Clicked)
     self.togglePostureButton.disconnect('clicked(bool)', self.onTogglePostureClicked)
     self.anatomyCompleteButton.disconnect('clicked(bool)', self.onAnatomyCompleteClicked)
-    self.compStep1Button.disconnect('clicked(bool)', self.onCompStep1Clicked)
-    self.compStep2Button.disconnect('clicked(bool)', self.onCompStep2Clicked)
-    self.compStep3Button.disconnect('clicked(bool)', self.onCompStep3Clicked)
 
     self.calibrationCollapsibleButton.disconnect('toggled(bool)', self.onCalibrationSetupPanelToggled)
     self.procedureCollapsibleButton.disconnect('toggled(bool)', self.onProcedureTabToggled)
     self.anatomyCollapsibleButton.disconnect('toggled(bool)', self.onAnatomyTabToggled)
     
-    self.insStep1Button.disconnect('clicked(bool)', self.onInsStep1Clicked)
-    self.insStep2Button.disconnect('clicked(bool)', self.onInsStep2Clicked)
-    self.insStep3Button.disconnect('clicked(bool)', self.onInsStep3Clicked)
-    self.insStep4Button.disconnect('clicked(bool)', self.onInsStep4Clicked)
-    
-    self.fluidStep1Button.disconnect('clicked(bool)', self.onFluidStep1Clicked)
-    self.fluidStep2Button.disconnect('clicked(bool)', self.onFluidStep2Clicked)
-    self.fluidStep3Button.disconnect('clicked(bool)', self.onFluidStep3Clicked)
-    self.fluidStep4Button.disconnect('clicked(bool)', self.onFluidStep4Clicked)
+    self.procedureButton1.disconnect('clicked(bool)', self.onProcedureButton1Clicked)
+    self.procedureButton2.disconnect('clicked(bool)', self.onProcedureButton2Clicked)
+    self.procedureButton3.disconnect('clicked(bool)', self.onProcedureButton3Clicked)
+    self.procedureButton4.disconnect('clicked(bool)', self.onProcedureButton4Clicked)
+    self.procedureButton5.disconnect('clicked(bool)', self.onProcedureButton5Clicked)
+    self.procedureButton6.disconnect('clicked(bool)', self.onProcedureButton6Clicked)
+    self.procedureButton7.disconnect('clicked(bool)', self.onProcedureButton7Clicked)
+    self.procedureButton8.disconnect('clicked(bool)', self.onProcedureButton8Clicked)
+    self.procedureButton9.disconnect('clicked(bool)', self.onProcedureButton9Clicked)
+    self.procedureButton10.disconnect('clicked(bool)', self.onProcedureButton10Clicked)
+    self.procedureButton11.disconnect('clicked(bool)', self.onProcedureButton11Clicked)
+    self.procedureButton12.disconnect('clicked(bool)', self.onProcedureButton12Clicked)
+    self.procedureButton13.disconnect('clicked(bool)', self.onProcedureButton13Clicked)
+    self.procedureButton14.disconnect('clicked(bool)', self.onProcedureButton14Clicked)
+    self.procedureButton15.disconnect('clicked(bool)', self.onProcedureButton15Clicked)
+    self.procedureButton16.disconnect('clicked(bool)', self.onProcedureButton16Clicked)
     
     self.pivotCalibrationButton.disconnect('clicked(bool)', self.onNeedleCalibrationClicked)
     self.spinCalibrationButton.disconnect('clicked(bool)', self.onSpinCalibrationClicked)
     self.pivotSamplingTimer.disconnect('timeout()', self.onPivotSamplingTimeout)
     
     self.viewAlignmentButton.disconnect('clicked(bool)', self.align3DView)
-    
-    self.step1Button.disconnect('clicked(bool)', self.onStep1Clicked)
-    self.step2Button.disconnect('clicked(bool)', self.onStep2Clicked)
-    self.step3Button.disconnect('clicked(bool)', self.onStep3Clicked)
-    self.step4Button.disconnect('clicked(bool)', self.onStep4Clicked)
-    self.step5Button.disconnect('clicked(bool)', self.onStep5Clicked)
 
     try:
       self.clickCatcherNode.RemoveObserver(self.clickCatcherObserver)
@@ -924,6 +968,8 @@ class LumbarTutorGuidelet(Guidelet):
 
   def onAnatomyTabToggled(self, toggled):
     """Triggers when the Anatomy tab opens or closes."""
+    if hasattr(self, 'needleModel') and self.needleModel and self.needleModel.GetDisplayNode():
+        self.needleModel.GetDisplayNode().SetVisibility(not toggled)
     if toggled:
       if hasattr(self, 'nonAnatomyTabModel') and self.nonAnatomyTabModel.GetDisplayNode():
         self.nonAnatomyTabModel.GetDisplayNode().SetVisibility(False)
@@ -932,6 +978,7 @@ class LumbarTutorGuidelet(Guidelet):
         self.postureTextActor.SetVisibility(True)
         slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
       self.tiltSpineModels(0)
+      self.align3DView()
       self.calibrationCollapsibleButton.setProperty('collapsed', True)
       self.procedureCollapsibleButton.setProperty('collapsed', True)
       
@@ -1132,10 +1179,10 @@ class LumbarTutorGuidelet(Guidelet):
     # --- Check if Procedure Tab is open ---
     if not self.procedureCollapsibleButton.collapsed:
       procedureButtons = [
-        self.step1Button, self.step2Button, self.step3Button, self.step4Button, self.step5Button,
-        self.insStep1Button, self.insStep2Button, self.insStep3Button, self.insStep4Button,
-        self.fluidStep1Button, self.fluidStep2Button, self.fluidStep3Button, self.fluidStep4Button,
-        self.compStep1Button, self.compStep2Button, self.compStep3Button
+        self.procedureButton1, self.procedureButton2, self.procedureButton3, self.procedureButton4, self.procedureButton5,
+        self.procedureButton6, self.procedureButton7, self.procedureButton8, self.procedureButton9,
+        self.procedureButton10, self.procedureButton11, self.procedureButton12, self.procedureButton13,
+        self.procedureButton14, self.procedureButton15, self.procedureButton16
       ]
       for btn in procedureButtons:
         if btn.isVisible() and btn.isEnabled():
@@ -1167,7 +1214,7 @@ class LumbarTutorGuidelet(Guidelet):
   def onL5Clicked(self):
     print("User is attempting to click L5...")
     
-    self.tiltSpineModels(35)
+    self.tiltSpineModels(330)
     
     # 1. Only reveal the toggle posture button
     self.advanceAnatomyStep(self.l5Button, self.togglePostureButton)
@@ -1239,70 +1286,74 @@ class LumbarTutorGuidelet(Guidelet):
         modelNode.GetDisplayNode().SetVisibility(False)
   
   # ==========================================
-  # PHASE 1 CLICK LOGIC
+  # PROCEDURE CLICK LOGIC
   # ==========================================
-  def onStep1Clicked(self):
-    self.advanceProcedureStep(self.step1Button, self.step2Button)
+  def onProcedureButton1Clicked(self):
+    self.advanceProcedureStep(self.procedureButton1, self.procedureButton2)
 
-  def onStep2Clicked(self):
-    self.advanceProcedureStep(self.step2Button, self.step3Button)
+  def onProcedureButton2Clicked(self):
+    self.advanceProcedureStep(self.procedureButton2, self.procedureButton3)
 
-  def onStep3Clicked(self):
-    self.advanceProcedureStep(self.step3Button, self.step4Button)
+  def onProcedureButton3Clicked(self):
+    self.advanceProcedureStep(self.procedureButton3, self.procedureButton4)
       
-  def onStep4Clicked(self):
-    self.advanceProcedureStep(self.step4Button, self.step5Button)
+  def onProcedureButton4Clicked(self):
+    self.advanceProcedureStep(self.procedureButton4, self.procedureButton5)
 
-  def onStep5Clicked(self):
-    # Transition to Needle Insertion phase
-    self.advanceProcedureStep(self.step5Button, self.insStep1Button)
+  def onProcedureButton5Clicked(self):
+    self.advanceProcedureStep(self.procedureButton5, self.procedureButton6)
 
-  # ==========================================
-  # PHASE 2 CLICK LOGIC
-  # ==========================================
-  def onInsStep1Clicked(self):
-    self.advanceProcedureStep(self.insStep1Button, self.insStep2Button)
+  def onProcedureButton6Clicked(self):
+    self.advanceProcedureStep(self.procedureButton6, self.procedureButton7)
 
-  def onInsStep2Clicked(self):
-    # NOTE: We use brackets [] here because this step reveals TWO buttons at once!
-    self.advanceProcedureStep(self.insStep2Button, self.insStep3Button)
-
-  def onInsStep3Clicked(self):
-    self.advanceProcedureStep(self.insStep3Button, self.insStep4Button) # No new buttons reveal here
-
-  def onInsStep4Clicked(self):
-    # Transition to Fluid phase
-    self.advanceProcedureStep(self.insStep4Button,self.fluidStep1Button)
-
-  # ==========================================
-  # PHASE 3 CLICK LOGIC
-  # ==========================================
-  def onFluidStep1Clicked(self):
-    self.advanceProcedureStep(self.fluidStep1Button, self.fluidStep2Button)
-
-  def onFluidStep2Clicked(self):
-    self.advanceProcedureStep(self.fluidStep2Button, self.fluidStep3Button)
-
-  def onFluidStep3Clicked(self):
-    self.advanceProcedureStep(self.fluidStep3Button, self.fluidStep4Button)
-
-  def onFluidStep4Clicked(self):
-    # Transition to Completion phase
-    self.advanceProcedureStep(self.fluidStep4Button, self.compStep1Button)
-
-  # ==========================================
-  # PHASE 4 CLICK LOGIC
-  # ==========================================
-  def onCompStep1Clicked(self):
-    self.advanceProcedureStep(self.compStep1Button, self.compStep2Button)
-
-  def onCompStep2Clicked(self):
-    self.advanceProcedureStep(self.compStep2Button, self.procedureStopRecordingButton)
-
-  def onCompStep3Clicked(self):
-    self.advanceProcedureStep(self.compStep3Button, None)
-
+  def onProcedureButton7Clicked(self):
+    self.advanceProcedureStep(self.procedureButton7, self.procedureButton8)
     
+    if hasattr(self, 'emTextActor'):
+      self.emTextActor.SetVisibility(True)
+      slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
+    if hasattr(self, 'alignmentTextActor'):
+      self.alignmentTextActor.SetVisibility(True)
+      slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
+    if hasattr(self, 'angleTextActor'):
+      self.angleTextActor.SetVisibility(True)
+      slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
+
+  def onProcedureButton8Clicked(self):
+    self.advanceProcedureStep(self.procedureButton8, self.procedureButton9) 
+
+  def onProcedureButton9Clicked(self):
+    self.advanceProcedureStep(self.procedureButton9, self.procedureButton10)
+
+  def onProcedureButton10Clicked(self):
+    self.advanceProcedureStep(self.procedureButton10, self.procedureButton11)
+
+  def onProcedureButton11Clicked(self):
+    self.advanceProcedureStep(self.procedureButton11, self.procedureButton12)
+
+  def onProcedureButton12Clicked(self):
+    self.advanceProcedureStep(self.procedureButton12, self.procedureButton13)
+    if hasattr(self, 'emTextActor'):
+      self.emTextActor.SetVisibility(False)
+      slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
+    if hasattr(self, 'alignmentTextActor'):
+      self.alignmentTextActor.SetVisibility(False)
+      slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
+    if hasattr(self, 'angleTextActor'):
+      self.angleTextActor.SetVisibility(False)
+      slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
+
+  def onProcedureButton13Clicked(self):
+    self.advanceProcedureStep(self.procedureButton13, self.procedureButton14)
+
+  def onProcedureButton14Clicked(self):
+    self.advanceProcedureStep(self.procedureButton14, self.procedureButton15)
+
+  def onProcedureButton15Clicked(self):
+    self.advanceProcedureStep(self.procedureButton15, self.procedureStopRecordingButton)
+
+  def onProcedureButton16Clicked(self):
+    self.advanceProcedureStep(self.procedureButton16, None)
     if self.ultrasound.startStopRecordingButton.isChecked():
         self.ultrasound.startStopRecordingButton.click()
 
@@ -1368,6 +1419,7 @@ class LumbarTutorGuidelet(Guidelet):
 
   def setupTopPanel(self):
     buttonMinWidth = 48
+    moduleDirectoryPath = slicer.modules.lumbartutor.path.replace('LumbarTutor.py', '')
 
     # 1. Create the layout
     self.topPanelLayout = qt.QGridLayout()
@@ -1390,21 +1442,24 @@ class LumbarTutorGuidelet(Guidelet):
     self.saveButton.connect('clicked()', self.saveAllRecordings)
 
     # --- Settings Button ---
-    self.settingsButton = qt.QPushButton("Settings")
+    self.settingsButton = qt.QPushButton()
+    self.settingsButton.setIcon(qt.QIcon(moduleDirectoryPath + '/Resources/Settings.png'))
     self.settingsButton.setMinimumWidth(buttonMinWidth)
     self.settingsButton.toolTip = 'Open Settings Menu'
     self.topPanelLayout.addWidget(self.settingsButton, 0, 2)
     self.settingsButton.connect('clicked()', self.onOpenSettingsClicked)
 
     # 4. Record Button
-    self.topRecordButton = qt.QPushButton("Start Recording")
+    self.topRecordButton = qt.QPushButton()
+    self.topRecordButton.setIcon(qt.QIcon(qt.QApplication.style().standardIcon(qt.QStyle.SP_MediaPlay)))
     self.topRecordButton.setCheckable(True)
     self.topRecordButton.toolTip = 'Start/Stop Sequence Browser Recording'
     self.topPanelLayout.addWidget(self.topRecordButton, 0, 3)
     self.topRecordButton.connect('clicked()', self.onStartStopRecordingClicked)
 
     # 5. Logout Button
-    self.logoutButton = qt.QPushButton("Logout")
+    self.logoutButton = qt.QPushButton()
+    self.logoutButton.setIcon(qt.QIcon(qt.QApplication.style().standardIcon(qt.QStyle.SP_ArrowLeft)))
     self.logoutButton.setMinimumWidth(buttonMinWidth)
     self.logoutButton.toolTip = 'Logout User'
     self.topPanelLayout.addWidget(self.logoutButton, 0, 4)
@@ -1499,20 +1554,20 @@ class LumbarTutorGuidelet(Guidelet):
   def onTopRecordButtonClicked(self):
     if self.topRecordButton.isChecked():
       # Visually indicate recording state
-      self.topRecordButton.setText("Stop Recording")
-      self.topRecordButton.setStyleSheet("background-color: #f44336; color: white; font-weight: bold;") 
+      self.topRecordButton.setIcon(qt.QIcon(qt.QApplication.style().standardIcon(qt.QStyle.SP_MediaStop)))
+      self.topRecordButton.setStyleSheet("background-color: #f44336;") 
       
       # Start recording
       self.needleTutorSequenceBrowserNode = slicer.vtkMRMLSequenceBrowserNode()
       self.startSequenceBrowserRecording(self.needleTutorSequenceBrowserNode)      
     else:
       # Reset visuals
-      self.topRecordButton.setText("Start Recording")
+      self.topRecordButton.setIcon(qt.QIcon(qt.QApplication.style().standardIcon(qt.QStyle.SP_MediaPlay)))
       self.topRecordButton.setStyleSheet("")
       
       # Stop recording
       self.stopSequenceBrowserRecording(self.needleTutorSequenceBrowserNode)
-
+  
   def onLoadButtonClicked(self):
     io = slicer.app.ioManager()
     params = {}
@@ -1587,18 +1642,125 @@ class LumbarTutorGuidelet(Guidelet):
 
 
   def updateNeedleTrackingDisplay(self):
+    import math
     if not hasattr(self, 'emPositionLabel') or not hasattr(self, 'needleToReference'):
       return
 
     matrix = vtk.vtkMatrix4x4()
     if not self.needleToReference.GetMatrixTransformToParent(matrix):
-      self.emPositionLabel.setText("Needle: unavailable")
+      self.emPositionLabel.setText("Needle tracking unavailable")
+      if hasattr(self, 'emTextActor'):
+        self.emTextActor.SetInput("Needle tracking unavailable")
+        self.alignmentTextActor.SetInput("")
+        self.angleTextActor.SetInput("")
       return
 
-    x = matrix.GetElement(0, 3)
-    y = matrix.GetElement(1, 3)
+    # 1. Get live needle coordinates
+    x = matrix.GetElement(0, 3) 
+    y = matrix.GetElement(1, 3) 
     z = matrix.GetElement(2, 3)
-    self.emPositionLabel.setText("Needle: X={0:.1f}  Y={1:.1f}  Z={2:.1f} mm".format(x, y, z))
+    
+    try:
+      targetModel = slicer.util.getNode('L4_L5_TargetSpace')
+      polyData = targetModel.GetPolyData()
+      bounds = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      targetModel.GetBounds(bounds)
+    except slicer.util.MRMLNodeNotFoundException:
+      return 
+
+    center_x = (bounds[0] + bounds[1]) / 2.0
+    posterior_edge = bounds[2] 
+    anterior_edge = bounds[3]  
+    center_y = (posterior_edge + anterior_edge) / 2.0
+
+    # ==========================================
+    # DEPTH LOGIC (Y-Axis & Surface Check)
+    # ==========================================
+    distanceFilter = vtk.vtkImplicitPolyDataDistance()
+    distanceFilter.SetInput(polyData)
+    distance = distanceFilter.EvaluateFunction(x, y, z)
+
+    if distance <= 0:
+        if y < center_y:
+            depthText = "Depth: In the spinal column"
+            depthColor = (0.2, 1.0, 0.2)
+        else:
+            depthText = "WARNING: Approaching the back of the spinal column"
+            depthColor = (1.0, 0.6, 0.0)
+    else:
+        if y < center_y:
+            depthText = "Depth: Approaching the spinal column"
+            depthColor = (0.2, 0.8, 1.0)
+        else:
+            depthText = "DANGER: You have gone through the spinal column!"
+            depthColor = (1.0, 0.0, 0.0)
+
+    # ==========================================
+    # ALIGNMENT LOGIC (X-Axis)
+    # ==========================================
+    offset_x = abs(x - center_x)
+    
+    if offset_x <= 3.0:
+        alignText = "Alignment: You are centered"
+        alignColor = (0.2, 1.0, 0.2)
+    elif offset_x <= 8.0:
+        alignText = "Alignment: You are slightly off center"
+        alignColor = (1.0, 0.8, 0.2)
+    else:
+        alignText = "WARNING: You are off the midline!"
+        alignColor = (1.0, 0.0, 0.0)
+
+    # ==========================================
+    # ANGLE LOGIC (Pitch / Elevation)
+    # ==========================================
+    # Extract the directional vector of the needle shaft (assuming local Z-axis)
+    nx = matrix.GetElement(0, 2)
+    ny = matrix.GetElement(1, 2)
+    nz = matrix.GetElement(2, 2) # Superior/Inferior tilt
+    
+    # Calculate elevation angle relative to the horizontal plane
+    horizontal_magnitude = math.sqrt(nx**2 + ny**2)
+    if horizontal_magnitude == 0:
+        angle = 90.0
+    else:
+        # Note: if the EM tool is calibrated upside-down, you may need to invert this by adding a negative sign: -math.degrees(...)
+        angle = math.degrees(math.atan2(nz, horizontal_magnitude))
+
+    if 15.0 <= angle <= 20.0:
+        angleText = f"Good needle angle"
+        angleColor = (0.2, 1.0, 0.2) # Green
+    elif 10.0 <= angle < 15.0:
+        angleText = f"Adjust angle slightly up"
+        angleColor = (1.0, 0.8, 0.2) # Yellow
+    elif 20.0 < angle <= 25.0:
+        angleText = f"Adjust angle slightly down"
+        angleColor = (1.0, 0.8, 0.2) # Yellow
+    elif angle < 10.0:
+        angleText = f"WARNING: Angle is off, please adjust up"
+        angleColor = (1.0, 0.0, 0.0) # Red
+    else: # angle > 25.0
+        angleText = f"WARNING: Angle is off, please adjust down"
+        angleColor = (1.0, 0.0, 0.0) # Red
+
+    # ==========================================
+    # UPDATE THE UI
+    # ==========================================
+    # Combine all three metrics for the side panel
+    self.emPositionLabel.setText(depthText + "\n" + alignText + "\n" + angleText)
+    
+    # Update the 3D viewer text actors
+    if hasattr(self, 'emTextActor') and hasattr(self, 'alignmentTextActor') and hasattr(self, 'angleTextActor'):
+      self.emTextActor.SetInput(depthText)
+      self.emTextActor.GetTextProperty().SetColor(depthColor)
+      
+      self.alignmentTextActor.SetInput(alignText)
+      self.alignmentTextActor.GetTextProperty().SetColor(alignColor)
+      
+      self.angleTextActor.SetInput(angleText)
+      self.angleTextActor.GetTextProperty().SetColor(angleColor)
+      
+      if self.emTextActor.GetVisibility():
+        slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
 
 
   def onNeedleCalibrationClicked(self, toggled):
@@ -1695,27 +1857,27 @@ class LumbarTutorGuidelet(Guidelet):
 
     
   def align3DView(self):
-    # We want a view from the posterior with the superior up and the left left
-    # The spine should be centred
-    spineCenter_RAS = [ 0, 0, 0 ]
-    if ( self.spineModel is not None ):
-      comFilter = vtk.vtkCenterOfMass()
-      comFilter.SetInputData( self.spineModel.GetPolyData() )
-      comFilter.SetUseScalarsAsWeights( False )
-      comFilter.Update()
-      spineCenter_RAS = comFilter.GetCenter()
-      
-    # Setup the cameras for the 3D views
-    # Implicit assumption that the spine is rotationally aligned with the RAS coordinate frame
-    CAMERA_DISTANCE = 600 #mm # Controls the "zoom"
-    CAMERA_CLIPPING_RANGE = [ 0.1, 1000 ] # This is the default clipping range. Change it if you change the camera distance.
-    cameraNodes = slicer.mrmlScene.GetNodesByClass( "vtkMRMLCameraNode" )
-    if ( cameraNodes.GetNumberOfItems() > 0 ):
-      camera0 = cameraNodes.GetItemAsObject( 0 )
-      camera0.SetFocalPoint( spineCenter_RAS[ 0 ], spineCenter_RAS[ 1 ] - 50, spineCenter_RAS[ 2 ] )
-      camera0.SetPosition( spineCenter_RAS[ 0 ] - CAMERA_DISTANCE, spineCenter_RAS[ 1 ] - 50, spineCenter_RAS[ 2 ] )
-      camera0.SetViewUp( 0, 0, 1 )
-      camera0.GetCamera().SetClippingRange( CAMERA_CLIPPING_RANGE )      
+    """Snaps the 3D camera back to the exact starting position."""
+    layoutManager = slicer.app.layoutManager()
+    if layoutManager.threeDViewCount < 1:
+      return
+
+    first3dView = layoutManager.threeDWidget(0).threeDView()
+    firstViewNode = first3dView.mrmlViewNode()
+    renderer = first3dView.renderWindow().GetRenderers().GetItemAsObject(0)
+
+    camerasLogic = slicer.modules.cameras.logic()
+    sceneCamera = camerasLogic.GetViewActiveCameraNode(firstViewNode)
+    camera = sceneCamera.GetCamera()
+
+    # Reset to the exact coordinates used in setupScene
+    camera.SetPosition(0.0, 800.0, 0.0)
+    camera.SetFocalPoint(0.0, 0.0, 0.0)
+    camera.SetViewUp(0.0, 0.0, 1.0)
+    camera.SetRoll(0)
+
+    renderer.ResetCameraClippingRange()
+    first3dView.scheduleRender()     
 
 
   def saveAllRecordings(self): # Ensure os is available
@@ -1922,90 +2084,88 @@ class LumbarTutorGuidelet(Guidelet):
     self.procedureStartRecordingButton = self.createWrappedButton("Start Recording")
     self.procedureLayout.addWidget(self.procedureStartRecordingButton)
     self.procedureStartRecordingButton.connect('clicked()', self.onProcedureStartRecordingClicked)
+
     # ==========================================
     # PHASE 1: PRE-PROCEDURE
     # ==========================================
-    self.step1Button = self.createWrappedButton("Before Begining, the patient should be positioned in the lateral decubitus position or upright leaning forward withtheir feet supported, with their back facing the clinician. The patient's hips and knees should be flexed to open up the spaces between the vertebrae.")
-    self.step1Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.step1Button)
+    self.procedureButton1 = self.createWrappedButton("Before Begining, the patient should be positioned in the lateral decubitus position...")
+    self.procedureButton1.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton1)
 
-    self.step2Button = self.createWrappedButton("Palpate the iliac crests and spinous processes L3, L4, L5")
-    self.step2Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.step2Button)
+    self.procedureButton2 = self.createWrappedButton("Palpate the iliac crests and spinous processes L3, L4, L5")
+    self.procedureButton2.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton2)
 
-    self.step3Button = self.createWrappedButton("Palpate the L4/L5 interspace, specifically at the midline")
-    self.step3Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.step3Button)
+    self.procedureButton3 = self.createWrappedButton("Palpate the L4/L5 interspace, specifically at the midline")
+    self.procedureButton3.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton3)
 
-    self.step4Button = self.createWrappedButton("Mark that spot with a marker or pen")
-    self.step4Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.step4Button)
+    self.procedureButton4 = self.createWrappedButton("Mark that spot with a marker or pen")
+    self.procedureButton4.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton4)
 
-    self.step5Button = self.createWrappedButton("Wash hands, apply gloves, drape the patient, and prepare the tools")
-    self.step5Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.step5Button)
+    self.procedureButton5 = self.createWrappedButton("Wash hands, apply gloves, drape the patient, and prepare the tools")
+    self.procedureButton5.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton5)
 
     # ==========================================
     # PHASE 2: NEEDLE INSERTION
     # ==========================================
-    self.insStep1Button = self.createWrappedButton("Sterilize the field")
-    self.insStep1Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.insStep1Button)
+    self.procedureButton6 = self.createWrappedButton("Sterilize the field")
+    self.procedureButton6.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton6)
 
-    self.insStep2Button = self.createWrappedButton("Inject idocane at the site of the procedure (subcutaneous injection)")
-    self.insStep2Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.insStep2Button)
+    self.procedureButton7 = self.createWrappedButton("Inject idocane at the site of the procedure (subcutaneous injection)")
+    self.procedureButton7.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton7)
 
-    self.insStep3Button = self.createWrappedButton("With the stylet in place, insert the needle slowly at the midline (and parallel to it) above the lower spinus process with and angle of 15-20 degrees cephalad")
-    self.insStep3Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.insStep3Button)
+    self.procedureButton8 = self.createWrappedButton("With the stylet in place, insert the needle slowly at the midline...")
+    self.procedureButton8.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton8)
 
-    self.insStep4Button = self.createWrappedButton("Feel for a loss of resistance or pop sensation as the needle passes the ligamentum flavum and enters the epidural space \n Note: if you hit bone, move back a few millimeters and try again.")
-    self.insStep4Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.insStep4Button)
+    self.procedureButton9 = self.createWrappedButton("Feel for a loss of resistance or pop sensation as the needle passes...")
+    self.procedureButton9.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton9)
 
     # ==========================================
     # PHASE 3: FLUID REMOVAL
     # ==========================================
-    self.fluidStep1Button = self.createWrappedButton("Remove the stylet and note any fluid that appears at the end of the needle \n Note: if no fluid is appearing, place the stylet back in and move slightly forward (3-5 mm deeper) and repeat the process")
-    self.fluidStep1Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.fluidStep1Button)
+    self.procedureButton10 = self.createWrappedButton("Remove the stylet and note any fluid that appears at the end of the needle...")
+    self.procedureButton10.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton10)
 
-    self.fluidStep2Button = self.createWrappedButton("Once fluid is collected, reinsert the stylet")
-    self.fluidStep2Button.setVisible(False)
-    self.procedureLayout.addWidget(self.fluidStep2Button)
+    self.procedureButton11 = self.createWrappedButton("Once fluid is collected, reinsert the stylet")
+    self.procedureButton11.setVisible(False)
+    self.procedureLayout.addWidget(self.procedureButton11)
 
-    self.fluidStep3Button = self.createWrappedButton("Remove the needle slowly") 
-    self.fluidStep3Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.fluidStep3Button)
+    self.procedureButton12 = self.createWrappedButton("Remove the needle slowly") 
+    self.procedureButton12.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton12)
 
-    self.fluidStep4Button = self.createWrappedButton("Apply pressure to the site and bandage the wound")
-    self.fluidStep4Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.fluidStep4Button)
+    self.procedureButton13 = self.createWrappedButton("Apply pressure to the site and bandage the wound")
+    self.procedureButton13.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton13)
 
     # ==========================================
     # PHASE 4: PROCEDURE COMPLETION
     # ==========================================
-    self.compStep1Button = self.createWrappedButton("Dispose of the needle in the sharps container")
-    self.compStep1Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.compStep1Button)
+    self.procedureButton14 = self.createWrappedButton("Dispose of the needle in the sharps container")
+    self.procedureButton14.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton14)
 
-    self.compStep2Button = self.createWrappedButton("Clean up the field and remove drapes")
-    self.compStep2Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.compStep2Button)
-
+    self.procedureButton15 = self.createWrappedButton("Clean up the field and remove drapes")
+    self.procedureButton15.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton15)
+    
     # 2. STOP RECORDING BUTTON (Second to Last Button)
     self.procedureStopRecordingButton = self.createWrappedButton("Stop Recording")
     self.procedureLayout.addWidget(self.procedureStopRecordingButton)
     self.procedureStopRecordingButton.setVisible(False) # Hidden until revealed by the previous step
     self.procedureStopRecordingButton.connect('clicked()', self.onProcedureStopRecordingClicked)
 
-    # 3. FINAL PROCEDURE BUTTON (Last Button)
-    # (Assuming you have a final button like "Procedure Complete", it should be added after the stop button)
-
-    self.compStep3Button = self.createWrappedButton("End of Study")
-    self.compStep3Button.setVisible(False) 
-    self.procedureLayout.addWidget(self.compStep3Button)
+    self.procedureButton16 = self.createWrappedButton("End of Study")
+    self.procedureButton16.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton16)
     
     self.procedureLayout.addStretch(1)
 
@@ -2022,7 +2182,7 @@ class LumbarTutorGuidelet(Guidelet):
             print(f"Silent recording error ignored: {e}") 
 
     # 2. Advance the checklist 
-    self.advanceProcedureStep(self.procedureStartRecordingButton, self.step1Button)
+    self.advanceProcedureStep(self.procedureStartRecordingButton, self.procedureButton1)
 
 
   def onProcedureStopRecordingClicked(self):
@@ -2041,7 +2201,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.saveAllRecordings()
 
     # 2. Advance the checklist
-    self.advanceProcedureStep(self.procedureStopRecordingButton, self.compStep3Button)
+    self.advanceProcedureStep(self.procedureStopRecordingButton, self.procedureButton16)
 
   def onCalibrationSetupPanelToggled(self, toggled):
     if toggled == False:
@@ -2050,12 +2210,16 @@ class LumbarTutorGuidelet(Guidelet):
     logging.debug('onCalibrationSetupPanelToggled: {0}'.format(toggled))
     self.navigationView = self.parameterNode.GetParameter( "CalibrationLayout" )
     self.updateNavigationView()
+    self.tiltSpineModels(0)
+    self.align3DView()
 
   def onProcedureTabToggled(self, toggled):
     if toggled:
       # Close all the other tabs
       self.calibrationCollapsibleButton.setProperty('collapsed', True)
       self.anatomyCollapsibleButton.setProperty('collapsed', True) 
+      self.tiltSpineModels(0)
+      self.align3DView()
     
   def onSpineSelected(self):
     selectedSpineModel = self.spineComboBox.currentNode()
@@ -2372,12 +2536,12 @@ class LumbarTutorGuidelet(Guidelet):
       self.fileName = self.userIDLineEdit.text + "-" + time.strftime("%Y%m%d-%H%M%S")
       cameraCommand = "START"+"    "+  str(os.path.join(self.parameterNode.GetParameter('SavedScenesDirectory'),self.fileName))
       self.cameraCommandText.SetText( cameraCommand )
-      self.topRecordButton.setText("Stop Recording")
-      self.topRecordButton.setStyleSheet("background-color: #f44336; color: white; font-weight: bold;") 
+      self.topRecordButton.setIcon(qt.QIcon(qt.QApplication.style().standardIcon(qt.QStyle.SP_MediaStop)))
+      self.topRecordButton.setStyleSheet("background-color: #f44336;") 
 
     else:
       #self.stopSequenceBrowserRecording(self.needleTutorSequenceBrowserNode)
       self.cameraCommandText.SetText( "STOP" )
-      self.topRecordButton.setText("Start Recording")
+      self.topRecordButton.setIcon(qt.QIcon(qt.QApplication.style().standardIcon(qt.QStyle.SP_MediaPlay)))
       self.topRecordButton.setStyleSheet("") 
       
