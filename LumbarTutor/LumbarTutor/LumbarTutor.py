@@ -445,7 +445,7 @@ class LumbarTutorGuidelet(Guidelet):
     )
     # Keep it hidden from the user
     if self.targetSpaceL4L5 and self.targetSpaceL4L5.GetDisplayNode():
-        self.targetSpaceL4L5.GetDisplayNode().SetVisibility(False)
+        self.targetSpaceL4L5.GetDisplayNode().SetVisibility(True)
         
     # ==========================================
     # 3D SCREEN TEXT OVERLAY
@@ -970,6 +970,8 @@ class LumbarTutorGuidelet(Guidelet):
     """Triggers when the Anatomy tab opens or closes."""
     if hasattr(self, 'needleModel') and self.needleModel and self.needleModel.GetDisplayNode():
         self.needleModel.GetDisplayNode().SetVisibility(not toggled)
+    if hasattr(self, 'targetSpaceL4L5') and self.targetSpaceL4L5.GetDisplayNode():
+        self.targetSpaceL4L5.GetDisplayNode().SetVisibility(toggled)
     if toggled:
       if hasattr(self, 'nonAnatomyTabModel') and self.nonAnatomyTabModel.GetDisplayNode():
         self.nonAnatomyTabModel.GetDisplayNode().SetVisibility(False)
@@ -1724,7 +1726,7 @@ class LumbarTutorGuidelet(Guidelet):
         angle = 90.0
     else:
         # Note: if the EM tool is calibrated upside-down, you may need to invert this by adding a negative sign: -math.degrees(...)
-        angle = math.degrees(math.atan2(nz, horizontal_magnitude))
+        angle = -math.degrees(math.atan2(nz, horizontal_magnitude))
 
     if 15.0 <= angle <= 20.0:
         angleText = f"Good needle angle"
