@@ -2088,25 +2088,41 @@ class LumbarTutorGuidelet(Guidelet):
     # ==========================================
     # PHASE 1: PRE-PROCEDURE
     # ==========================================
-    self.procedureButton1 = self.createWrappedButton("Before Begining, the patient should be positioned in the lateral decubitus position...")
+    self.procedureButton1 = self.createWrappedButton("Before beginning, position the patient in the lateral decubitus position.")
     self.procedureButton1.setVisible(False) 
     self.procedureLayout.addWidget(self.procedureButton1)
 
-    self.procedureButton2 = self.createWrappedButton("Palpate the iliac crests and spinous processes L3, L4, L5")
+    self.procedureButton2 = self.createWrappedButton("Palpate the iliac crests.")
     self.procedureButton2.setVisible(False) 
     self.procedureLayout.addWidget(self.procedureButton2)
 
-    self.procedureButton3 = self.createWrappedButton("Palpate the L4/L5 interspace, specifically at the midline")
+    self.procedureButton2.1 = self.createWrappedButton("Identify the L3,L4, and L5 spinous processes.")
+    self.procedureButton2.1.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton2.1)
+
+    self.procedureButton2.2 = self.createWrappedButton("Locate the L4/L5 interspace at the midline.")
+    self.procedureButton2.2.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton2.2)
+
+    self.procedureButton3 = self.createWrappedButton("Palpate the L4/L5 interspace, specifically at the midline.")
     self.procedureButton3.setVisible(False) 
     self.procedureLayout.addWidget(self.procedureButton3)
 
-    self.procedureButton4 = self.createWrappedButton("Mark that spot with a marker or pen")
+    self.procedureButton4 = self.createWrappedButton("Mark the insertion site with a marker or pen.")
     self.procedureButton4.setVisible(False) 
     self.procedureLayout.addWidget(self.procedureButton4)
 
-    self.procedureButton5 = self.createWrappedButton("Wash hands, apply gloves, drape the patient, and prepare the tools")
+    self.procedureButton5 = self.createWrappedButton("Wash hands.")
     self.procedureButton5.setVisible(False) 
     self.procedureLayout.addWidget(self.procedureButton5)
+
+    self.procedureButton5.1 = self.createWrappedButton("Apply gloves.")
+    self.procedureButton5.1.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton5.1)
+
+    self.procedureButton5.2 = self.createWrappedButton("Prepare the required equipment.")
+    self.procedureButton5.2.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton5.2)
 
     # ==========================================
     # PHASE 2: NEEDLE INSERTION
@@ -2115,36 +2131,52 @@ class LumbarTutorGuidelet(Guidelet):
     self.procedureButton6.setVisible(False) 
     self.procedureLayout.addWidget(self.procedureButton6)
 
-    self.procedureButton7 = self.createWrappedButton("Inject idocane at the site of the procedure (subcutaneous injection)")
+    self.procedureButton7 = self.createWrappedButton("Inject idocane subcutaneously at the injection site")
     self.procedureButton7.setVisible(False) 
     self.procedureLayout.addWidget(self.procedureButton7)
 
-    self.procedureButton8 = self.createWrappedButton("With the stylet in place, insert the needle slowly at the midline...")
+    self.procedureButton8 = self.createWrappedButton("Insert the spinal needle with the stylet in place.")
     self.procedureButton8.setVisible(False) 
     self.procedureLayout.addWidget(self.procedureButton8)
 
-    self.procedureButton9 = self.createWrappedButton("Feel for a loss of resistance or pop sensation as the needle passes...")
+    self.procedureButton8.1 = self.createWrappedButton("Advance the needle slowly along the midline.")
+    self.procedureButton8.1.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton8.1)
+
+    self.procedureButton9 = self.createWrappedButton("Feel for a loss of resistance or \"pop\" sensation.")
     self.procedureButton9.setVisible(False) 
     self.procedureLayout.addWidget(self.procedureButton9)
 
     # ==========================================
     # PHASE 3: FLUID REMOVAL
     # ==========================================
-    self.procedureButton10 = self.createWrappedButton("Remove the stylet and note any fluid that appears at the end of the needle...")
+    self.procedureButton10 = self.createWrappedButton("Remove the stylet.")
     self.procedureButton10.setVisible(False) 
     self.procedureLayout.addWidget(self.procedureButton10)
 
-    self.procedureButton11 = self.createWrappedButton("Once fluid is collected, reinsert the stylet")
+    self.procedureButton10.1 = self.createWrappedButton("Observe cerebrospinal fluid (CSF).")
+    self.procedureButton10.1.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton10.1)
+
+    self.procedureButton10.2 = self.createWrappedButton("Collect the CSF sample.")
+    self.procedureButton10.2.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton10.2)
+
+    self.procedureButton11 = self.createWrappedButton("Reinsert the stylet.")
     self.procedureButton11.setVisible(False)
     self.procedureLayout.addWidget(self.procedureButton11)
 
-    self.procedureButton12 = self.createWrappedButton("Remove the needle slowly") 
+    self.procedureButton12 = self.createWrappedButton("Remove the needle slowly.") 
     self.procedureButton12.setVisible(False) 
     self.procedureLayout.addWidget(self.procedureButton12)
 
-    self.procedureButton13 = self.createWrappedButton("Apply pressure to the site and bandage the wound")
+    self.procedureButton13 = self.createWrappedButton("Apply pressure to the insertion site.")
     self.procedureButton13.setVisible(False) 
     self.procedureLayout.addWidget(self.procedureButton13)
+
+    self.procedureButton13.1 = self.createWrappedButton("Apply a bandage.")
+    self.procedureButton13.1.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton13.1)
 
     # ==========================================
     # PHASE 4: PROCEDURE COMPLETION
@@ -2153,10 +2185,14 @@ class LumbarTutorGuidelet(Guidelet):
     self.procedureButton14.setVisible(False) 
     self.procedureLayout.addWidget(self.procedureButton14)
 
-    self.procedureButton15 = self.createWrappedButton("Clean up the field and remove drapes")
+    self.procedureButton15 = self.createWrappedButton("Remove drapes.")
     self.procedureButton15.setVisible(False) 
     self.procedureLayout.addWidget(self.procedureButton15)
     
+    self.procedureButton15.1 = self.createWrappedButton("Clean up procedure area.")
+    self.procedureButton15.1.setVisible(False) 
+    self.procedureLayout.addWidget(self.procedureButton15.1)
+
     # 2. STOP RECORDING BUTTON (Second to Last Button)
     self.procedureStopRecordingButton = self.createWrappedButton("Stop Recording")
     self.procedureLayout.addWidget(self.procedureStopRecordingButton)
