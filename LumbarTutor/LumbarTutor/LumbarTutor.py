@@ -299,6 +299,7 @@ class LumbarTutorGuidelet(Guidelet):
     # This will automatically create the ReferenceToRas transform
     Guidelet.setupScene(self)
     self.referenceToRas = self.ultrasound.referenceToRas
+    self.loadReferenceToRasFromFile()
     
     moduleDir = os.path.dirname(slicer.modules.lumbartutor.path)
 
@@ -445,7 +446,7 @@ class LumbarTutorGuidelet(Guidelet):
     )
     # Keep it hidden from the user
     if self.targetSpaceL4L5 and self.targetSpaceL4L5.GetDisplayNode():
-        self.targetSpaceL4L5.GetDisplayNode().SetVisibility(True)
+        self.targetSpaceL4L5.GetDisplayNode().SetVisibility(False)
         
     # ==========================================
     # 3D SCREEN TEXT OVERLAY
@@ -722,6 +723,34 @@ class LumbarTutorGuidelet(Guidelet):
     self.userIDLineEdit.setText('User ID')
     self.userID = "UnknownUser"
 
+  def loadReferenceToRasFromFile(self):
+    if not hasattr(self, 'referenceToRas') or self.referenceToRas is None:
+      return
+
+    moduleDir = os.path.dirname(slicer.modules.lumbartutor.path)
+    filePath = os.path.join(moduleDir, 'Resources', 'ReferenceToRas.h5')
+    if not os.path.exists(filePath):
+      logging.warning(f"ReferenceToRas transform file not found: {filePath}")
+      return
+
+    try:
+      success, loadedTransform = slicer.util.loadTransform(filePath, returnNode=True)
+    except Exception as e:
+      logging.warning(f"Could not load ReferenceToRas transform from {filePath}: {e}")
+      return
+
+    if not success or loadedTransform is None:
+      logging.warning(f"Could not load ReferenceToRas transform from {filePath}")
+      return
+
+    matrix = vtk.vtkMatrix4x4()
+    loadedTransform.GetMatrixTransformToParent(matrix)
+    self.referenceToRas.SetAndObserveTransformNodeID(None)
+    self.referenceToRas.SetMatrixTransformToParent(matrix)
+    slicer.mrmlScene.RemoveNode(loadedTransform)
+    logging.info(f"Loaded ReferenceToRas transform from {filePath}")
+
+
   def loadOrCreateModel(self, nodeName, fileName, color):
     """Helper to load a model from Resources, or create a blank one if the file is missing."""
     try:
@@ -746,6 +775,9 @@ class LumbarTutorGuidelet(Guidelet):
         # (If "horizontal" means something else for your specific files, 
         # you can change this to transform.RotateX(180) or transform.RotateY(180)!)
         transform.RotateX(180) 
+        if nodeName == 'L4_L5_TargetSpace':
+          transform.RotateZ(180)
+          transform.RotateY(180)
         
         # 2. Apply the spin directly to the raw 3D mesh data
         transformFilter = vtk.vtkTransformPolyDataFilter()
@@ -971,8 +1003,9 @@ class LumbarTutorGuidelet(Guidelet):
     if hasattr(self, 'needleModel') and self.needleModel and self.needleModel.GetDisplayNode():
         self.needleModel.GetDisplayNode().SetVisibility(not toggled)
     if hasattr(self, 'targetSpaceL4L5') and self.targetSpaceL4L5.GetDisplayNode():
-        self.targetSpaceL4L5.GetDisplayNode().SetVisibility(toggled)
+        self.targetSpaceL4L5.GetDisplayNode().SetVisibility(False)
     if toggled:
+      self.hideNeedleWarningActors()
       if hasattr(self, 'nonAnatomyTabModel') and self.nonAnatomyTabModel.GetDisplayNode():
         self.nonAnatomyTabModel.GetDisplayNode().SetVisibility(False)
 
@@ -1335,15 +1368,7 @@ class LumbarTutorGuidelet(Guidelet):
 
   def onProcedureButton12Clicked(self):
     self.advanceProcedureStep(self.procedureButton12, self.procedureButton13)
-    if hasattr(self, 'emTextActor'):
-      self.emTextActor.SetVisibility(False)
-      slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
-    if hasattr(self, 'alignmentTextActor'):
-      self.alignmentTextActor.SetVisibility(False)
-      slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
-    if hasattr(self, 'angleTextActor'):
-      self.angleTextActor.SetVisibility(False)
-      slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
+    self.hideNeedleWarningActors()
 
   def onProcedureButton13Clicked(self):
     self.advanceProcedureStep(self.procedureButton13, self.procedureButton14)
@@ -1639,9 +1664,18 @@ class LumbarTutorGuidelet(Guidelet):
     self.needleToReferenceObserver = None
 
 
+  def hideNeedleWarningActors(self):
+    actorsHidden = False
+    for actorName in ['emTextActor', 'alignmentTextActor', 'angleTextActor']:
+      if hasattr(self, actorName):
+        getattr(self, actorName).SetVisibility(False)
+        actorsHidden = True
+    if actorsHidden:
+      slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
+
+
   def onNeedleTransformModified(self, caller, event):
     self.updateNeedleTrackingDisplay()
-
 
   def updateNeedleTrackingDisplay(self):
     import math
@@ -1658,54 +1692,91 @@ class LumbarTutorGuidelet(Guidelet):
       return
 
     # 1. Get live needle coordinates
-    x = matrix.GetElement(0, 3) 
-    y = matrix.GetElement(1, 3) 
+    x = matrix.GetElement(0, 3)
+    y = matrix.GetElement(1, 3)
     z = matrix.GetElement(2, 3)
-    
+    self.emPositionLabel.setText("X: {0:.2f}  Y: {1:.2f}  Z: {2:.2f}".format(x, y, z))
+
     try:
       targetModel = slicer.util.getNode('L4_L5_TargetSpace')
       polyData = targetModel.GetPolyData()
       bounds = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
       targetModel.GetBounds(bounds)
     except slicer.util.MRMLNodeNotFoundException:
-      return 
+      return
 
     center_x = (bounds[0] + bounds[1]) / 2.0
-    posterior_edge = bounds[2] 
-    anterior_edge = bounds[3]  
-    center_y = (posterior_edge + anterior_edge) / 2.0
+    posterior_edge = bounds[4] 
+    anterior_edge = bounds[5]  
+    center_depth = (posterior_edge + anterior_edge) / 2.0
+    needle_depth = z
 
     # ==========================================
     # DEPTH LOGIC (Y-Axis & Surface Check)
     # ==========================================
-    distanceFilter = vtk.vtkImplicitPolyDataDistance()
-    distanceFilter.SetInput(polyData)
-    distance = distanceFilter.EvaluateFunction(x, y, z)
+    # ==========================================
+    # DEPTH LOGIC: must be inside L4/L5 STL region
+    # ==========================================
 
-    if distance <= 0:
-        if y < center_y:
-            depthText = "Depth: In the spinal column"
-            depthColor = (0.2, 1.0, 0.2)
-        else:
-            depthText = "WARNING: Approaching the back of the spinal column"
-            depthColor = (1.0, 0.6, 0.0)
+    # Bounds format:
+    # bounds[0], bounds[1] = X min/max
+    # bounds[2], bounds[3] = Y min/max
+    # bounds[4], bounds[5] = Z min/max
+
+    x_min = bounds[0]
+    x_max = bounds[1]
+    y_min = bounds[2]
+    y_max = bounds[3]
+
+    # Since your depth is backwards, use bounds[5] as the front
+    front_edge = bounds[5]
+    back_edge = bounds[4]
+
+    needle_depth = z
+    depth_span = back_edge - front_edge
+
+    # Optional padding. Keep small so "in it" only happens near the STL.
+    padding_mm = 2.0
+
+    inside_l4l5_width = (
+      x >= x_min - padding_mm and x <= x_max + padding_mm and
+      y >= y_min - padding_mm and y <= y_max + padding_mm
+    )
+
+    if abs(depth_span) < 0.001:
+      depth_fraction = 0.0
     else:
-        if y < center_y:
-            depthText = "Depth: Approaching the spinal column"
-            depthColor = (0.2, 0.8, 1.0)
-        else:
-            depthText = "DANGER: You have gone through the spinal column!"
-            depthColor = (1.0, 0.0, 0.0)
+      depth_fraction = (needle_depth - front_edge) / depth_span
+
+    if not inside_l4l5_width:
+      depthText = "Depth: Not aligned with L4/L5 space"
+      depthColor = (1.0, 0.8, 0.2)
+
+    elif depth_fraction < 0.0:
+      depthText = "Depth: Approaching the spinal column"
+      depthColor = (0.2, 0.8, 1.0)
+
+    elif depth_fraction <= 0.5:
+      depthText = "Depth: In the first half of the spinal column"
+      depthColor = (0.2, 1.0, 0.2)
+
+    elif depth_fraction <= 1.0:
+      depthText = "Depth: In the second half of the spinal column"
+      depthColor = (1.0, 0.8, 0.2)
+
+    else:
+      depthText = "DANGER: You have passed the spinal column!"
+      depthColor = (1.0, 0.0, 0.0)
 
     # ==========================================
     # ALIGNMENT LOGIC (X-Axis)
     # ==========================================
     offset_x = abs(x - center_x)
     
-    if offset_x <= 3.0:
+    if offset_x <= 10.0:
         alignText = "Alignment: You are centered"
         alignColor = (0.2, 1.0, 0.2)
-    elif offset_x <= 8.0:
+    elif offset_x <= 20.0:
         alignText = "Alignment: You are slightly off center"
         alignColor = (1.0, 0.8, 0.2)
     else:
@@ -1716,45 +1787,37 @@ class LumbarTutorGuidelet(Guidelet):
     # ANGLE LOGIC (Pitch / Elevation)
     # ==========================================
     # Extract the directional vector of the needle shaft (assuming local Z-axis)
-    nx = matrix.GetElement(0, 2)
-    ny = matrix.GetElement(1, 2)
-    nz = matrix.GetElement(2, 2) # Superior/Inferior tilt
-    
-    # Calculate elevation angle relative to the horizontal plane
-    horizontal_magnitude = math.sqrt(nx**2 + ny**2)
-    if horizontal_magnitude == 0:
-        angle = 90.0
-    else:
-        # Note: if the EM tool is calibrated upside-down, you may need to invert this by adding a negative sign: -math.degrees(...)
-        angle = -math.degrees(math.atan2(nz, horizontal_magnitude))
+    nx = matrix.GetElement(0, 1)
+    ny = matrix.GetElement(1, 1)
+    nz = matrix.GetElement(2, 1)
+
+    angle = -math.degrees(math.atan2(nz, abs(ny)))
 
     if 15.0 <= angle <= 20.0:
         angleText = f"Good needle angle"
         angleColor = (0.2, 1.0, 0.2) # Green
     elif 10.0 <= angle < 15.0:
-        angleText = f"Adjust angle slightly up"
-        angleColor = (1.0, 0.8, 0.2) # Yellow
-    elif 20.0 < angle <= 25.0:
         angleText = f"Adjust angle slightly down"
         angleColor = (1.0, 0.8, 0.2) # Yellow
+    elif 20.0 < angle <= 25.0:
+        angleText = f"Adjust angle slightly up"
+        angleColor = (1.0, 0.8, 0.2) # Yellow
     elif angle < 10.0:
-        angleText = f"WARNING: Angle is off, please adjust up"
+        angleText = f"WARNING: Angle is off, please adjust down"
         angleColor = (1.0, 0.0, 0.0) # Red
     else: # angle > 25.0
-        angleText = f"WARNING: Angle is off, please adjust down"
+        angleText = f"WARNING: Angle is off, please adjust up"
         angleColor = (1.0, 0.0, 0.0) # Red
 
     # ==========================================
     # UPDATE THE UI
     # ==========================================
-    # Combine all three metrics for the side panel
-    self.emPositionLabel.setText(depthText + "\n" + alignText + "\n" + angleText)
-    
-    # Update the 3D viewer text actors
+    # Keep the calibration panel as raw tracking coordinates. Warnings are only
+    # shown as 3D view overlays during the procedure.
     if hasattr(self, 'emTextActor') and hasattr(self, 'alignmentTextActor') and hasattr(self, 'angleTextActor'):
       self.emTextActor.SetInput(depthText)
       self.emTextActor.GetTextProperty().SetColor(depthColor)
-      
+
       self.alignmentTextActor.SetInput(alignText)
       self.alignmentTextActor.GetTextProperty().SetColor(alignColor)
       
@@ -2210,6 +2273,7 @@ class LumbarTutorGuidelet(Guidelet):
       return
 
     logging.debug('onCalibrationSetupPanelToggled: {0}'.format(toggled))
+    self.hideNeedleWarningActors()
     self.navigationView = self.parameterNode.GetParameter( "CalibrationLayout" )
     self.updateNavigationView()
     self.tiltSpineModels(0)
@@ -2219,9 +2283,17 @@ class LumbarTutorGuidelet(Guidelet):
     if toggled:
       # Close all the other tabs
       self.calibrationCollapsibleButton.setProperty('collapsed', True)
-      self.anatomyCollapsibleButton.setProperty('collapsed', True) 
+      self.anatomyCollapsibleButton.setProperty('collapsed', True)
+      if hasattr(self, 'targetSpaceL4L5') and self.targetSpaceL4L5.GetDisplayNode():
+        self.targetSpaceL4L5.GetDisplayNode().SetVisibility(True)
+
       self.tiltSpineModels(0)
       self.align3DView()
+    else:
+      if hasattr(self, 'targetSpaceL4L5') and self.targetSpaceL4L5.GetDisplayNode():
+        self.targetSpaceL4L5.GetDisplayNode().SetVisibility(False)
+
+      self.hideNeedleWarningActors()
     
   def onSpineSelected(self):
     selectedSpineModel = self.spineComboBox.currentNode()

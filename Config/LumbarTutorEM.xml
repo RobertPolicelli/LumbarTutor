@@ -1,0 +1,82 @@
+<PlusConfiguration version="2.8" PlusRevision="Plus-2.8.0.62873a16 - Win32">
+  <DataCollection StartupDelaySec="1.0">
+    <DeviceSet
+      Name="Lumbar Tutor Plus Configuration"
+      Description="EM sensors: 1 Reference, 2 Needle. No ultrasound video stream. Tracking data is continuously recorded."
+    />
+
+    <Device
+      Id="TrackerDevice"
+      Type="Ascension3DG"
+      AcquisitionRate="50"
+      LocalTimeOffsetSec="0.0"
+      FilterAcWideNotch="1"
+      ToolReferenceFrame="Tracker">
+
+      <DataSources>
+        <DataSource
+          Type="Tool"
+          Id="Reference"
+          BufferSize="500"
+          PortName="0"
+          AveragedItemsForFiltering="20"
+        />
+
+        <DataSource
+          Type="Tool"
+          Id="Needle"
+          BufferSize="500"
+          PortName="1"
+          AveragedItemsForFiltering="20"
+        />
+      </DataSources>
+
+      <OutputChannels>
+        <OutputChannel Id="TrackerStream">
+          <DataSource Id="Reference" />
+          <DataSource Id="Needle" />
+        </OutputChannel>
+      </OutputChannels>
+    </Device>
+
+    <Device
+      Id="CaptureDeviceTracker"
+      Type="VirtualCapture"
+      BaseFilename="LumpNavTracking.mhd"
+      EnableCapturingOnStart="FALSE"
+      EnableFileCompression="FALSE"
+      RequestedFrameRate="15"
+      FrameBufferSize="450">
+
+      <InputChannels>
+        <InputChannel Id="TrackerStream" />
+      </InputChannels>
+    </Device>
+  </DataCollection>
+
+  <CoordinateDefinitions>
+  </CoordinateDefinitions>
+
+  <PlusOpenIGTLinkServer
+    MaxNumberOfIgtlMessagesToSend="1"
+    MaxTimeSpentWithProcessingMs="50"
+    ListeningPort="18944"
+    SendValidTransformsOnly="true"
+    OutputChannelId="TrackerStream">
+
+    <DefaultClientInfo>
+      <MessageTypes>
+        <Message Type="TRANSFORM" />
+      </MessageTypes>
+
+      <TransformNames>
+        <!-- Tool visibility relative to tracker -->
+        <Transform Name="ReferenceToTracker" />
+        <Transform Name="NeedleToTracker" />
+
+        <!-- Needle position relative to the reference sensor -->
+        <Transform Name="NeedleToReference" />
+      </TransformNames>
+    </DefaultClientInfo>
+  </PlusOpenIGTLinkServer>
+</PlusConfiguration>
