@@ -519,7 +519,7 @@ class LumbarTutorGuidelet(Guidelet):
       self.angleTextActor.GetTextProperty().SetJustificationToRight()
       self.angleTextActor.GetTextProperty().SetVerticalJustificationToTop()
       self.angleTextActor.GetPositionCoordinate().SetCoordinateSystemToNormalizedViewport()
-      self.angleTextActor.SetPosition(0.98, 0.85) 
+      self.angleTextActor.SetPosition(0.98, 0.90) 
       self.angleTextActor.SetVisibility(False) 
       self.renderer.AddActor(self.angleTextActor)
 
@@ -1344,15 +1344,7 @@ class LumbarTutorGuidelet(Guidelet):
   def onProcedureButton7Clicked(self):
     self.advanceProcedureStep(self.procedureButton7, self.procedureButton8)
     
-    if hasattr(self, 'emTextActor'):
-      self.emTextActor.SetVisibility(True)
-      slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
-    if hasattr(self, 'alignmentTextActor'):
-      self.alignmentTextActor.SetVisibility(True)
-      slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
-    if hasattr(self, 'angleTextActor'):
-      self.angleTextActor.SetVisibility(True)
-      slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
+    self.isGuidanceActive = True
 
   def onProcedureButton8Clicked(self):
     self.advanceProcedureStep(self.procedureButton8, self.procedureButton9) 
@@ -1368,6 +1360,9 @@ class LumbarTutorGuidelet(Guidelet):
 
   def onProcedureButton12Clicked(self):
     self.advanceProcedureStep(self.procedureButton12, self.procedureButton13)
+    
+    # Turn OFF the depth and angle display and immediately hide the text
+    self.isGuidanceActive = False
     self.hideNeedleWarningActors()
 
   def onProcedureButton13Clicked(self):
@@ -1676,157 +1671,155 @@ class LumbarTutorGuidelet(Guidelet):
 
   def onNeedleTransformModified(self, caller, event):
     self.updateNeedleTrackingDisplay()
-
+  
   def updateNeedleTrackingDisplay(self):
-    import math
-    if not hasattr(self, 'emPositionLabel') or not hasattr(self, 'needleToReference'):
+    """Display the raw tracked needle directly against the L4/L5 target STL and calculate depth and angle."""
+    if not hasattr(self, 'needleTipToNeedle') or not self.needleTipToNeedle:
       return
 
-    matrix = vtk.vtkMatrix4x4()
-    if not self.needleToReference.GetMatrixTransformToParent(matrix):
-      self.emPositionLabel.setText("Needle tracking unavailable")
-      if hasattr(self, 'emTextActor'):
-        self.emTextActor.SetInput("Needle tracking unavailable")
-        self.alignmentTextActor.SetInput("")
-        self.angleTextActor.SetInput("")
-      return
+    # 1. Get the calibrated Needle TIP in global World/RAS coordinates
+    tipToWorldMatrix = vtk.vtkMatrix4x4()
+    self.needleTipToNeedle.GetMatrixTransformToWorld(tipToWorldMatrix)
 
-    # 1. Get live needle coordinates
-    x = matrix.GetElement(0, 3)
-    y = matrix.GetElement(1, 3)
-    z = matrix.GetElement(2, 3)
-    self.emPositionLabel.setText("X: {0:.2f}  Y: {1:.2f}  Z: {2:.2f}".format(x, y, z))
+    x = tipToWorldMatrix.GetElement(0, 3)
+    y = tipToWorldMatrix.GetElement(1, 3)
+    z = tipToWorldMatrix.GetElement(2, 3)
 
-    try:
-      targetModel = slicer.util.getNode('L4_L5_TargetSpace')
-      polyData = targetModel.GetPolyData()
-      bounds = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-      targetModel.GetBounds(bounds)
-    except slicer.util.MRMLNodeNotFoundException:
-      return
-
-    center_x = (bounds[0] + bounds[1]) / 2.0
-    posterior_edge = bounds[4] 
-    anterior_edge = bounds[5]  
-    center_depth = (posterior_edge + anterior_edge) / 2.0
-    needle_depth = z
+    # Keep coordinates only in the calibration panel.
+    if hasattr(self, 'emPositionLabel'):
+      self.emPositionLabel.setText(f"X: {x:.2f}  Y: {y:.2f}  Z: {z:.2f}")
 
     # ==========================================
-    # DEPTH LOGIC (Y-Axis & Surface Check)
+    # ONLY SHOW GUIDANCE BETWEEN STEPS 7 AND 12
     # ==========================================
-    # ==========================================
-    # DEPTH LOGIC: must be inside L4/L5 STL region
-    # ==========================================
+    if getattr(self, 'isGuidanceActive', False):
+        
+      # 2. Raycast along the Y-axis to find the Front and Back surfaces
+      if hasattr(self, 'targetSpaceL4L5') and self.targetSpaceL4L5 and self.targetSpaceL4L5.GetPolyData():
+        
+        # Safely get the STL's World Matrix
+        modelToWorldMatrix = vtk.vtkMatrix4x4()
+        parentTransform = self.targetSpaceL4L5.GetParentTransformNode()
+        if parentTransform:
+          parentTransform.GetMatrixTransformToWorld(modelToWorldMatrix)
+        
+        # Create a reverse map (World back to Local)
+        worldToModelMatrix = vtk.vtkMatrix4x4()
+        vtk.vtkMatrix4x4.Invert(modelToWorldMatrix, worldToModelMatrix)
 
-    # Bounds format:
-    # bounds[0], bounds[1] = X min/max
-    # bounds[2], bounds[3] = Y min/max
-    # bounds[4], bounds[5] = Z min/max
+        # Build the Collision Tree (Only happens once)
+        if not hasattr(self, 'targetOBBTree'):
+          self.targetOBBTree = vtk.vtkOBBTree()
+          self.targetOBBTree.SetDataSet(self.targetSpaceL4L5.GetPolyData())
+          self.targetOBBTree.BuildLocator()
 
-    x_min = bounds[0]
-    x_max = bounds[1]
-    y_min = bounds[2]
-    y_max = bounds[3]
+        # Define our "Laser Beam" passing through the needle tip along the Y-axis
+        p1_World = [x, y + 500.0, z, 1.0]
+        p2_World = [x, y - 500.0, z, 1.0]
 
-    # Since your depth is backwards, use bounds[5] as the front
-    front_edge = bounds[5]
-    back_edge = bounds[4]
+        p1_Local = [0.0, 0.0, 0.0, 0.0]
+        p2_Local = [0.0, 0.0, 0.0, 0.0]
 
-    needle_depth = z
-    depth_span = back_edge - front_edge
+        worldToModelMatrix.MultiplyPoint(p1_World, p1_Local)
+        worldToModelMatrix.MultiplyPoint(p2_World, p2_Local)
 
-    # Optional padding. Keep small so "in it" only happens near the STL.
-    padding_mm = 2.0
+        # Shoot the laser and collect where it hits the STL
+        intersectPoints = vtk.vtkPoints()
+        self.targetOBBTree.IntersectWithLine(p1_Local[0:3], p2_Local[0:3], intersectPoints, None)
 
-    inside_l4l5_width = (
-      x >= x_min - padding_mm and x <= x_max + padding_mm and
-      y >= y_min - padding_mm and y <= y_max + padding_mm
-    )
+        if hasattr(self, 'emTextActor'):
+          self.emTextActor.SetVisibility(True)
+          
+          numPoints = intersectPoints.GetNumberOfPoints()
+          if numPoints > 0:
+              world_Y_coords = []
+              for i in range(numPoints):
+                  pt_Local = intersectPoints.GetPoint(i)
+                  pt_World = [0.0, 0.0, 0.0, 0.0]
+                  modelToWorldMatrix.MultiplyPoint([pt_Local[0], pt_Local[1], pt_Local[2], 1.0], pt_World)
+                  world_Y_coords.append(pt_World[1])
 
-    if abs(depth_span) < 0.001:
-      depth_fraction = 0.0
-    else:
-      depth_fraction = (needle_depth - front_edge) / depth_span
+              world_Y_coords.sort(reverse=True)
+              front_y = world_Y_coords[0]
+              back_y = world_Y_coords[-1]
 
-    if not inside_l4l5_width:
-      depthText = "Depth: Not aligned with L4/L5 space"
-      depthColor = (1.0, 0.8, 0.2)
-
-    elif depth_fraction < 0.0:
-      depthText = "Depth: Approaching the spinal column"
-      depthColor = (0.2, 0.8, 1.0)
-
-    elif depth_fraction <= 0.5:
-      depthText = "Depth: In the first half of the spinal column"
-      depthColor = (0.2, 1.0, 0.2)
-
-    elif depth_fraction <= 1.0:
-      depthText = "Depth: In the second half of the spinal column"
-      depthColor = (1.0, 0.8, 0.2)
-
-    else:
-      depthText = "DANGER: You have passed the spinal column!"
-      depthColor = (1.0, 0.0, 0.0)
-
-    # ==========================================
-    # ALIGNMENT LOGIC (X-Axis)
-    # ==========================================
-    offset_x = abs(x - center_x)
-    
-    if offset_x <= 10.0:
-        alignText = "Alignment: You are centered"
-        alignColor = (0.2, 1.0, 0.2)
-    elif offset_x <= 20.0:
-        alignText = "Alignment: You are slightly off center"
-        alignColor = (1.0, 0.8, 0.2)
-    else:
-        alignText = "WARNING: You are off the midline!"
-        alignColor = (1.0, 0.0, 0.0)
-
-    # ==========================================
-    # ANGLE LOGIC (Pitch / Elevation)
-    # ==========================================
-    # Extract the directional vector of the needle shaft (assuming local Z-axis)
-    nx = matrix.GetElement(0, 1)
-    ny = matrix.GetElement(1, 1)
-    nz = matrix.GetElement(2, 1)
-
-    angle = -math.degrees(math.atan2(nz, abs(ny)))
-
-    if 15.0 <= angle <= 20.0:
-        angleText = f"Good needle angle"
-        angleColor = (0.2, 1.0, 0.2) # Green
-    elif 10.0 <= angle < 15.0:
-        angleText = f"Adjust angle slightly down"
-        angleColor = (1.0, 0.8, 0.2) # Yellow
-    elif 20.0 < angle <= 25.0:
-        angleText = f"Adjust angle slightly up"
-        angleColor = (1.0, 0.8, 0.2) # Yellow
-    elif angle < 10.0:
-        angleText = f"WARNING: Angle is off, please adjust down"
-        angleColor = (1.0, 0.0, 0.0) # Red
-    else: # angle > 25.0
-        angleText = f"WARNING: Angle is off, please adjust up"
-        angleColor = (1.0, 0.0, 0.0) # Red
-
-    # ==========================================
-    # UPDATE THE UI
-    # ==========================================
-    # Keep the calibration panel as raw tracking coordinates. Warnings are only
-    # shown as 3D view overlays during the procedure.
-    if hasattr(self, 'emTextActor') and hasattr(self, 'alignmentTextActor') and hasattr(self, 'angleTextActor'):
-      self.emTextActor.SetInput(depthText)
-      self.emTextActor.GetTextProperty().SetColor(depthColor)
-
-      self.alignmentTextActor.SetInput(alignText)
-      self.alignmentTextActor.GetTextProperty().SetColor(alignColor)
+              if y > front_y:
+                  dist = y - front_y
+                  self.emTextActor.SetInput(f"Status: In Front ({dist:.1f} mm to surface)")
+                  self.emTextActor.GetTextProperty().SetColor(0.2, 0.8, 1.0)
+              elif y < back_y:
+                  dist = back_y - y
+                  self.emTextActor.SetInput(f"Status: Behind Target! ({dist:.1f} mm past)")
+                  self.emTextActor.GetTextProperty().SetColor(1.0, 0.2, 0.2)
+              else:
+                  dist = front_y - y
+                  self.emTextActor.SetInput(f"Status: INSIDE TARGET ({dist:.1f} mm deep)")
+                  self.emTextActor.GetTextProperty().SetColor(0.2, 1.0, 0.2)
+          else:
+              self.emTextActor.SetInput("Status: Off Target (Center The Needle)")
+              self.emTextActor.GetTextProperty().SetColor(1.0, 0.6, 0.2)
+              
+      # 3. Calculate Needle Angle (Up/Down relative to global Z-axis)
+      import math
+      tip_World_H = [0.0, 0.0, 0.0, 1.0]
+      shaft_World_H = [0.0, 0.0, 1.0, 1.0]
       
-      self.angleTextActor.SetInput(angleText)
-      self.angleTextActor.GetTextProperty().SetColor(angleColor)
+      tip_W = [0.0, 0.0, 0.0, 0.0]
+      shaft_W = [0.0, 0.0, 0.0, 0.0]
       
-      if self.emTextActor.GetVisibility():
-        slicer.app.layoutManager().threeDWidget(0).threeDView().scheduleRender()
+      tipToWorldMatrix.MultiplyPoint(tip_World_H, tip_W)
+      tipToWorldMatrix.MultiplyPoint(shaft_World_H, shaft_W)
+      
+      dz = tip_W[2] - shaft_W[2]
+      dy = tip_W[1] - shaft_W[1]
+      dx = tip_W[0] - shaft_W[0]
+      
+      length = math.sqrt(dx**2 + dy**2 + dz**2)
+      if length > 0:
+          dz_norm = dz / length
+          angle_rad = math.asin(dz_norm)
+          angle_deg = math.degrees(angle_rad)
+          
+          if hasattr(self, 'angleTextActor'):
+              self.angleTextActor.SetVisibility(True)
+              if angle_deg > 0.5:
+                  self.angleTextActor.SetInput(f"Angle: {abs(angle_deg):.1f}° UP")
+                  self.angleTextActor.GetTextProperty().SetColor(1.0, 1.0, 0.0)
+              elif angle_deg < -0.5:
+                  self.angleTextActor.SetInput(f"Angle: {abs(angle_deg):.1f}° DOWN")
+                  self.angleTextActor.GetTextProperty().SetColor(1.0, 0.5, 0.0)
+              else:
+                  self.angleTextActor.SetInput(f"Angle: Level (0.0°)")
+                  self.angleTextActor.GetTextProperty().SetColor(0.2, 1.0, 0.2)
 
+      # Disable ONLY the alignment text while guidance is active
+      if hasattr(self, 'alignmentTextActor'):
+          self.alignmentTextActor.SetVisibility(False)
+
+    else:
+      # If Guidance is NOT active, ensure all text actors stay hidden even if the needle moves
+      for actorName in ['emTextActor', 'alignmentTextActor', 'angleTextActor']:
+        if hasattr(self, actorName):
+          getattr(self, actorName).SetVisibility(False)
+
+    # 4. Show the raw tracked needle.
+    if hasattr(self, 'needleModel') and self.needleModel:
+      needleDisplay = self.needleModel.GetDisplayNode()
+      if needleDisplay:
+        needleDisplay.SetVisibility(True)
+        needleDisplay.SetColor(0.0, 1.0, 1.0)
+        needleDisplay.SetOpacity(1.0)
+
+    # 5. Keep the L4/L5 target STL hidden for realistic blind simulation.
+    if hasattr(self, 'targetSpaceL4L5') and self.targetSpaceL4L5:
+      targetDisplay = self.targetSpaceL4L5.GetDisplayNode()
+      if targetDisplay:
+        targetDisplay.SetVisibility(False)
+
+    # 6. Refresh the 3D view.
+    layoutManager = slicer.app.layoutManager()
+    if layoutManager and layoutManager.threeDWidget(0):
+      layoutManager.threeDWidget(0).threeDView().scheduleRender()
 
   def onNeedleCalibrationClicked(self, toggled):
     logging.debug('onNeedleCalibrationClicked')
@@ -2284,8 +2277,10 @@ class LumbarTutorGuidelet(Guidelet):
       # Close all the other tabs
       self.calibrationCollapsibleButton.setProperty('collapsed', True)
       self.anatomyCollapsibleButton.setProperty('collapsed', True)
+      
+      # Ensure the target space stays permanently hidden when opening the tab
       if hasattr(self, 'targetSpaceL4L5') and self.targetSpaceL4L5.GetDisplayNode():
-        self.targetSpaceL4L5.GetDisplayNode().SetVisibility(True)
+        self.targetSpaceL4L5.GetDisplayNode().SetVisibility(False)
 
       self.tiltSpineModels(0)
       self.align3DView()
