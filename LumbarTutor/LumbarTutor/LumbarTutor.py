@@ -241,6 +241,8 @@ class LumbarTutorGuidelet(Guidelet):
 
   # Clean up when guidelet is closed
   def cleanup(self):#common
+    self.saveAllRecordings() 
+    self.onSaveSceneClicked() 
     Guidelet.cleanup(self)
     logging.debug('cleanup')
 
@@ -1596,9 +1598,23 @@ class LumbarTutorGuidelet(Guidelet):
     io.openDialog("VolumeFile", slicer.qSlicerDataDialog.Read, params)
 
   def onExitButtonClicked(self):
+    # Automatically save all tracking recordings (.sqbr)
+    self.saveAllRecordings() 
+    self.onSaveSceneClicked() 
+
     mainwindow = slicer.util.mainWindow()
     if mainwindow:
       mainwindow.close()
+    # Create a filename with the current date/time to avoid overwriting old files
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    mrbFileName = f"LumbarTutor_Scene_{timestamp}.mrb"
+
+    # Construct the full path to your SavedScenes folder
+    mrbFilePath = os.path.join(self.parameterNode.GetParameter('SavedScenesDirectory'), mrbFileName)
+
+    # Tell Slicer to bundle and save the entire scene to that path
+    slicer.util.saveScene(mrbFilePath)
+    print(f"Successfully bundled and saved scene to: {mrbFilePath}")
 
   def calibrationSetupPanel(self):
     logging.debug('calibrationSetupPanel')
@@ -1693,6 +1709,8 @@ class LumbarTutorGuidelet(Guidelet):
     # ONLY SHOW GUIDANCE BETWEEN STEPS 7 AND 12
     # ==========================================
     if getattr(self, 'isGuidanceActive', False):
+
+      isInFrontOfTarget = False
         
       # 2. Raycast along the Y-axis to find the Front and Back surfaces
       if hasattr(self, 'targetSpaceL4L5') and self.targetSpaceL4L5 and self.targetSpaceL4L5.GetPolyData():
@@ -1745,16 +1763,19 @@ class LumbarTutorGuidelet(Guidelet):
 
               if y > front_y:
                   dist = y - front_y
-                  self.emTextActor.SetInput(f"Status: In Front ({dist:.1f} mm to surface)")
+                  self.emTextActor.SetInput(f"Status: In Front Target!")
                   self.emTextActor.GetTextProperty().SetColor(0.2, 0.8, 1.0)
+                  isInFrontOfTarget = True
               elif y < back_y:
                   dist = back_y - y
-                  self.emTextActor.SetInput(f"Status: Behind Target! ({dist:.1f} mm past)")
+                  self.emTextActor.SetInput(f"Status: Behind Target!")
                   self.emTextActor.GetTextProperty().SetColor(1.0, 0.2, 0.2)
+                  isInFrontOfTarget = True
               else:
                   dist = front_y - y
-                  self.emTextActor.SetInput(f"Status: INSIDE TARGET ({dist:.1f} mm deep)")
+                  self.emTextActor.SetInput(f"Status: INSIDE TARGET!")
                   self.emTextActor.GetTextProperty().SetColor(0.2, 1.0, 0.2)
+                  isInFrontOfTarget = True
           else:
               self.emTextActor.SetInput("Status: Off Target (Center The Needle)")
               self.emTextActor.GetTextProperty().SetColor(1.0, 0.6, 0.2)
@@ -1775,23 +1796,32 @@ class LumbarTutorGuidelet(Guidelet):
       dx = tip_W[0] - shaft_W[0]
       
       length = math.sqrt(dx**2 + dy**2 + dz**2)
-      if length > 0:
-          dz_norm = dz / length
-          angle_rad = math.asin(dz_norm)
-          angle_deg = math.degrees(angle_rad)
-          
-          if hasattr(self, 'angleTextActor'):
+      if hasattr(self, 'angleTextActor'):
+          if length > 0 and isInFrontOfTarget:
+              dz_norm = dz / length
+              angle_rad = math.asin(dz_norm)
+              angle_deg = math.degrees(angle_rad)
+              
               self.angleTextActor.SetVisibility(True)
-              if angle_deg > 0.5:
-                  self.angleTextActor.SetInput(f"Angle: {abs(angle_deg):.1f}° UP")
+              
+              if angle_deg >= 0 and angle_deg < 10:
+                  self.angleTextActor.SetInput(f"Angle the needle slighly downwards")
                   self.angleTextActor.GetTextProperty().SetColor(1.0, 1.0, 0.0)
-              elif angle_deg < -0.5:
-                  self.angleTextActor.SetInput(f"Angle: {abs(angle_deg):.1f}° DOWN")
+              elif angle_deg > 25 and angle_deg <= 35:
+                  self.angleTextActor.SetInput(f"Angle the needle slighly upwards")
+                  self.angleTextActor.GetTextProperty().SetColor(1.0, 1.0, 0.0)
+              elif angle_deg > 35:
+                  self.angleTextActor.SetInput(f"Angle the needle upwards!")
                   self.angleTextActor.GetTextProperty().SetColor(1.0, 0.5, 0.0)
-              else:
-                  self.angleTextActor.SetInput(f"Angle: Level (0.0°)")
+              elif angle_deg < 0:
+                  self.angleTextActor.SetInput(f"Angle the needle downwards!")
+                  self.angleTextActor.GetTextProperty().SetColor(1.0, 0.5, 0.0)
+              elif angle_deg >= 10 and angle_deg <= 25:
+                  self.angleTextActor.SetInput(f"Angle: Level is Good")
                   self.angleTextActor.GetTextProperty().SetColor(0.2, 1.0, 0.2)
-
+          else:
+              self.angleTextActor.SetVisibility(False)
+              
       # Disable ONLY the alignment text while guidance is active
       if hasattr(self, 'alignmentTextActor'):
           self.alignmentTextActor.SetVisibility(False)
@@ -2601,7 +2631,7 @@ class LumbarTutorGuidelet(Guidelet):
   def onStartStopRecordingClicked(self):    
     if self.topRecordButton.isChecked():
       self.needleTutorSequenceBrowserNode = slicer.vtkMRMLSequenceBrowserNode()
-      #self.startSequenceBrowserRecording(self.needleTutorSequenceBrowserNode)    
+      self.startSequenceBrowserRecording(self.needleTutorSequenceBrowserNode)    
       self.fileName = self.userIDLineEdit.text + "-" + time.strftime("%Y%m%d-%H%M%S")
       cameraCommand = "START"+"    "+  str(os.path.join(self.parameterNode.GetParameter('SavedScenesDirectory'),self.fileName))
       self.cameraCommandText.SetText( cameraCommand )
@@ -2609,7 +2639,7 @@ class LumbarTutorGuidelet(Guidelet):
       self.topRecordButton.setStyleSheet("background-color: #f44336;") 
 
     else:
-      #self.stopSequenceBrowserRecording(self.needleTutorSequenceBrowserNode)
+      self.stopSequenceBrowserRecording(self.needleTutorSequenceBrowserNode)
       self.cameraCommandText.SetText( "STOP" )
       self.topRecordButton.setIcon(qt.QIcon(qt.QApplication.style().standardIcon(qt.QStyle.SP_MediaPlay)))
       self.topRecordButton.setStyleSheet("") 
