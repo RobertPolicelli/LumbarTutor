@@ -263,23 +263,6 @@ class LumbarTutorGuidelet(Guidelet):
     self.procedureCollapsibleButton.connect('toggled(bool)', self.onProcedureTabToggled)
     self.anatomyCollapsibleButton.connect('toggled(bool)', self.onAnatomyTabToggled)
 
-    self.procedureButton1.connect('clicked(bool)', self.onProcedureButton1Clicked)
-    self.procedureButton2.connect('clicked(bool)', self.onProcedureButton2Clicked)
-    self.procedureButton3.connect('clicked(bool)', self.onProcedureButton3Clicked)
-    self.procedureButton4.connect('clicked(bool)', self.onProcedureButton4Clicked)
-    self.procedureButton5.connect('clicked(bool)', self.onProcedureButton5Clicked)
-    self.procedureButton6.connect('clicked(bool)', self.onProcedureButton6Clicked)
-    self.procedureButton7.connect('clicked(bool)', self.onProcedureButton7Clicked)
-    self.procedureButton8.connect('clicked(bool)', self.onProcedureButton8Clicked)
-    self.procedureButton9.connect('clicked(bool)', self.onProcedureButton9Clicked)
-    self.procedureButton10.connect('clicked(bool)', self.onProcedureButton10Clicked)
-    self.procedureButton11.connect('clicked(bool)', self.onProcedureButton11Clicked)
-    self.procedureButton12.connect('clicked(bool)', self.onProcedureButton12Clicked)
-    self.procedureButton13.connect('clicked(bool)', self.onProcedureButton13Clicked)
-    self.procedureButton14.connect('clicked(bool)', self.onProcedureButton14Clicked)
-    self.procedureButton15.connect('clicked(bool)', self.onProcedureButton15Clicked)
-    self.procedureButton16.connect('clicked(bool)', self.onProcedureButton16Clicked)
-
     self.pivotCalibrationButton.connect('clicked(bool)', self.onNeedleCalibrationClicked)
     self.spinCalibrationButton.connect('clicked(bool)', self.onSpinCalibrationClicked)    
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
@@ -921,23 +904,19 @@ class LumbarTutorGuidelet(Guidelet):
     self.procedureCollapsibleButton.disconnect('toggled(bool)', self.onProcedureTabToggled)
     self.anatomyCollapsibleButton.disconnect('toggled(bool)', self.onAnatomyTabToggled)
     
-    self.procedureButton1.disconnect('clicked(bool)', self.onProcedureButton1Clicked)
-    self.procedureButton2.disconnect('clicked(bool)', self.onProcedureButton2Clicked)
-    self.procedureButton3.disconnect('clicked(bool)', self.onProcedureButton3Clicked)
-    self.procedureButton4.disconnect('clicked(bool)', self.onProcedureButton4Clicked)
-    self.procedureButton5.disconnect('clicked(bool)', self.onProcedureButton5Clicked)
-    self.procedureButton6.disconnect('clicked(bool)', self.onProcedureButton6Clicked)
-    self.procedureButton7.disconnect('clicked(bool)', self.onProcedureButton7Clicked)
-    self.procedureButton8.disconnect('clicked(bool)', self.onProcedureButton8Clicked)
-    self.procedureButton9.disconnect('clicked(bool)', self.onProcedureButton9Clicked)
-    self.procedureButton10.disconnect('clicked(bool)', self.onProcedureButton10Clicked)
-    self.procedureButton11.disconnect('clicked(bool)', self.onProcedureButton11Clicked)
-    self.procedureButton12.disconnect('clicked(bool)', self.onProcedureButton12Clicked)
-    self.procedureButton13.disconnect('clicked(bool)', self.onProcedureButton13Clicked)
-    self.procedureButton14.disconnect('clicked(bool)', self.onProcedureButton14Clicked)
-    self.procedureButton15.disconnect('clicked(bool)', self.onProcedureButton15Clicked)
-    self.procedureButton16.disconnect('clicked(bool)', self.onProcedureButton16Clicked)
-    
+    try:
+      self.procedureStartRecordingButton.disconnect('clicked()', self.onProcedureStartRecordingClicked)
+      self.procedureStopRecordingButton.disconnect('clicked()', self.onProcedureStopRecordingClicked)
+    except AttributeError:
+      pass
+
+    if hasattr(self, 'procedureButtonsList'):
+      for btn in self.procedureButtonsList:
+        try:
+          btn.disconnect('clicked()')
+        except Exception:
+          pass
+          
     self.pivotCalibrationButton.disconnect('clicked(bool)', self.onNeedleCalibrationClicked)
     self.spinCalibrationButton.disconnect('clicked(bool)', self.onSpinCalibrationClicked)
     self.pivotSamplingTimer.disconnect('timeout()', self.onPivotSamplingTimeout)
@@ -1212,22 +1191,27 @@ class LumbarTutorGuidelet(Guidelet):
   
   def onAdvanceStepShortcut(self):
     """Triggered when the user presses 'p'. Only advances Procedure steps."""
-    
-    # --- Check if Procedure Tab is open ---
     if not self.procedureCollapsibleButton.collapsed:
-      procedureButtons = [
-        self.procedureButton1, self.procedureButton2, self.procedureButton3, self.procedureButton4, self.procedureButton5,
-        self.procedureButton6, self.procedureButton7, self.procedureButton8, self.procedureButton9,
-        self.procedureButton10, self.procedureButton11, self.procedureButton12, self.procedureButton13,
-        self.procedureButton14, self.procedureButton15, self.procedureButton16
-      ]
-      for btn in procedureButtons:
-        if btn.isVisible() and btn.isEnabled():
-          btn.click() # Virtually click it!
-          break
+      
+      # 1. Check if Start Recording is visible and enabled
+      if self.procedureStartRecordingButton.isVisible() and self.procedureStartRecordingButton.isEnabled():
+          self.procedureStartRecordingButton.click()
+          return
+
+      # 2. Check the dynamic list
+      if hasattr(self, 'procedureButtonsList'):
+          for btn in self.procedureButtonsList:
+            if btn.isVisible() and btn.isEnabled():
+              btn.click() # Virtually click it!
+              return
+              
+      # 3. Check if Stop Recording is visible and enabled
+      if self.procedureStopRecordingButton.isVisible() and self.procedureStopRecordingButton.isEnabled():
+          self.procedureStopRecordingButton.click()
+          return
+          
     else:
-      # If they press 'p' in Anatomy, do nothing or show a message
-      slicer.util.showStatusMessage("Please identify the anatomy by clicking the 3D model.", 2000)
+      slicer.util.showStatusMessage("Please open the procedure tab to advance steps.", 2000)
     
   # ==========================================
   # ANATOMY CLICK LOGIC
@@ -1325,61 +1309,30 @@ class LumbarTutorGuidelet(Guidelet):
   # ==========================================
   # PROCEDURE CLICK LOGIC
   # ==========================================
-  def onProcedureButton1Clicked(self):
-    self.advanceProcedureStep(self.procedureButton1, self.procedureButton2)
-
-  def onProcedureButton2Clicked(self):
-    self.advanceProcedureStep(self.procedureButton2, self.procedureButton3)
-
-  def onProcedureButton3Clicked(self):
-    self.advanceProcedureStep(self.procedureButton3, self.procedureButton4)
-      
-  def onProcedureButton4Clicked(self):
-    self.advanceProcedureStep(self.procedureButton4, self.procedureButton5)
-
-  def onProcedureButton5Clicked(self):
-    self.advanceProcedureStep(self.procedureButton5, self.procedureButton6)
-
-  def onProcedureButton6Clicked(self):
-    self.advanceProcedureStep(self.procedureButton6, self.procedureButton7)
-
-  def onProcedureButton7Clicked(self):
-    self.advanceProcedureStep(self.procedureButton7, self.procedureButton8)
+  def onProcedureStepClicked(self, index, checked=False):
+    """Unified handler for all procedure steps."""
+    current_btn = self.procedureButtonsList[index]
     
-    self.isGuidanceActive = True
+    # Determine the next button to show (either the next step, or the Stop Recording button)
+    if index + 1 < len(self.procedureButtonsList):
+        next_btn = self.procedureButtonsList[index + 1]
+    else:
+        next_btn = self.procedureStopRecordingButton
+        if self.ultrasound.startStopRecordingButton.isChecked():
+            self.ultrasound.startStopRecordingButton.click()
 
-  def onProcedureButton8Clicked(self):
-    self.advanceProcedureStep(self.procedureButton8, self.procedureButton9) 
+    # Advance the UI
+    self.advanceProcedureStep(current_btn, next_btn)
 
-  def onProcedureButton9Clicked(self):
-    self.advanceProcedureStep(self.procedureButton9, self.procedureButton10)
-
-  def onProcedureButton10Clicked(self):
-    self.advanceProcedureStep(self.procedureButton10, self.procedureButton11)
-
-  def onProcedureButton11Clicked(self):
-    self.advanceProcedureStep(self.procedureButton11, self.procedureButton12)
-
-  def onProcedureButton12Clicked(self):
-    self.advanceProcedureStep(self.procedureButton12, self.procedureButton13)
-    
-    # Turn OFF the depth and angle display and immediately hide the text
-    self.isGuidanceActive = False
-    self.hideNeedleWarningActors()
-
-  def onProcedureButton13Clicked(self):
-    self.advanceProcedureStep(self.procedureButton13, self.procedureButton14)
-
-  def onProcedureButton14Clicked(self):
-    self.advanceProcedureStep(self.procedureButton14, self.procedureButton15)
-
-  def onProcedureButton15Clicked(self):
-    self.advanceProcedureStep(self.procedureButton15, self.procedureStopRecordingButton)
-
-  def onProcedureButton16Clicked(self):
-    self.advanceProcedureStep(self.procedureButton16, None)
-    if self.ultrasound.startStopRecordingButton.isChecked():
-        self.ultrasound.startStopRecordingButton.click()
+    # --- Specific Step Logic ---
+    # Index 6 is "Inject lidocaine..." -> Next step involves the needle, so turn on guidance
+    if index == 6:
+        self.isGuidanceActive = True
+        
+    # Index 11 is "Reinsert the stylet" -> Next step is removing the needle, turn off guidance
+    elif index == 11:
+        self.isGuidanceActive = False
+        self.hideNeedleWarningActors()
 
   def createPlusConnector(self, hostNamePort):
     connectorNode = slicer.vtkMRMLIGTLConnectorNode()
@@ -2173,77 +2126,35 @@ class LumbarTutorGuidelet(Guidelet):
     self.procedureLayout.addWidget(self.procedureStartRecordingButton)
     self.procedureStartRecordingButton.connect('clicked()', self.onProcedureStartRecordingClicked)
 
-    # ==========================================
-    # PHASE 1: PRE-PROCEDURE
-    # ==========================================
-    self.procedureButton1 = self.createWrappedButton("Before Begining, the patient should be positioned in the lateral decubitus position...")
-    self.procedureButton1.setVisible(False) 
-    self.procedureLayout.addWidget(self.procedureButton1)
+    procedure_steps = [
+        "Before beginning, the patient should be positioned in the lateral decubitus position...",
+        "Palpate the iliac crests and spinous processes L3, L4, L5",
+        "Palpate the L4/L5 interspace, specifically at the midline",
+        "Mark that spot with a marker or pen",
+        "Wash hands, apply gloves, drape the patient, and prepare the tools",
+        "Sterilize the field",
+        "Inject lidocaine at the site of the procedure (subcutaneous injection)",
+        "With the stylet in place, insert the needle slowly at the midline...",
+        "Feel for a loss of resistance or pop sensation as the needle passes...",
+        "Remove the stylet and note any fluid that appears at the end of the needle...",
+        "Collect the CSF sample",
+        "Reinsert the stylet",
+        "Remove the needle slowly",
+        "Apply pressure to the insertion site and apply a bandage",
+        "Dispose of the needle in the sharps container",
+        "Remove drapes and clean up procedure area"
+    ]
 
-    self.procedureButton2 = self.createWrappedButton("Palpate the iliac crests and spinous processes L3, L4, L5")
-    self.procedureButton2.setVisible(False) 
-    self.procedureLayout.addWidget(self.procedureButton2)
-
-    self.procedureButton3 = self.createWrappedButton("Palpate the L4/L5 interspace, specifically at the midline")
-    self.procedureButton3.setVisible(False) 
-    self.procedureLayout.addWidget(self.procedureButton3)
-
-    self.procedureButton4 = self.createWrappedButton("Mark that spot with a marker or pen")
-    self.procedureButton4.setVisible(False) 
-    self.procedureLayout.addWidget(self.procedureButton4)
-
-    self.procedureButton5 = self.createWrappedButton("Wash hands, apply gloves, drape the patient, and prepare the tools")
-    self.procedureButton5.setVisible(False) 
-    self.procedureLayout.addWidget(self.procedureButton5)
-
-    # ==========================================
-    # PHASE 2: NEEDLE INSERTION
-    # ==========================================
-    self.procedureButton6 = self.createWrappedButton("Sterilize the field")
-    self.procedureButton6.setVisible(False) 
-    self.procedureLayout.addWidget(self.procedureButton6)
-
-    self.procedureButton7 = self.createWrappedButton("Inject idocane at the site of the procedure (subcutaneous injection)")
-    self.procedureButton7.setVisible(False) 
-    self.procedureLayout.addWidget(self.procedureButton7)
-
-    self.procedureButton8 = self.createWrappedButton("With the stylet in place, insert the needle slowly at the midline...")
-    self.procedureButton8.setVisible(False) 
-    self.procedureLayout.addWidget(self.procedureButton8)
-
-    self.procedureButton9 = self.createWrappedButton("Feel for a loss of resistance or pop sensation as the needle passes...")
-    self.procedureButton9.setVisible(False) 
-    self.procedureLayout.addWidget(self.procedureButton9)
-
-    # ==========================================
-    # PHASE 3: FLUID REMOVAL
-    # ==========================================
-    self.procedureButton10 = self.createWrappedButton("Remove the stylet and note any fluid that appears at the end of the needle...")
-    self.procedureButton10.setVisible(False) 
-    self.procedureLayout.addWidget(self.procedureButton10)
-
-    self.procedureButton11 = self.createWrappedButton("Once fluid is collected, reinsert the stylet")
-    self.procedureButton11.setVisible(False)
-    self.procedureLayout.addWidget(self.procedureButton11)
-
-    self.procedureButton12 = self.createWrappedButton("Remove the needle slowly") 
-    self.procedureButton12.setVisible(False) 
-    self.procedureLayout.addWidget(self.procedureButton12)
-
-    self.procedureButton13 = self.createWrappedButton("Apply pressure to the site and bandage the wound")
-    self.procedureButton13.setVisible(False) 
-    self.procedureLayout.addWidget(self.procedureButton13)
-
-    # ==========================================
-    # PHASE 4: PROCEDURE COMPLETION
-    # ==========================================
-    self.procedureButton14 = self.createWrappedButton("Dispose of the needle in the sharps container")
-    self.procedureButton14.setVisible(False) 
-    self.procedureLayout.addWidget(self.procedureButton14)
-
-    self.procedureButton15 = self.createWrappedButton("Clean up the field and remove drapes")
-    self.procedureButton15.setVisible(False) 
-    self.procedureLayout.addWidget(self.procedureButton15)
+    self.procedureButtonsList = []
+    
+    for i, text in enumerate(procedure_steps):
+        btn = self.createWrappedButton(text)
+        btn.setVisible(False)
+        self.procedureLayout.addWidget(btn)
+        self.procedureButtonsList.append(btn)
+        
+        # Bind the click event, capturing the current index 'i'
+        btn.connect('clicked()', partial(self.onProcedureStepClicked, i))
     
     # 2. STOP RECORDING BUTTON (Second to Last Button)
     self.procedureStopRecordingButton = self.createWrappedButton("Stop Recording")
@@ -2258,38 +2169,104 @@ class LumbarTutorGuidelet(Guidelet):
     self.procedureLayout.addStretch(1)
 
   def onProcedureStartRecordingClicked(self):
-    """Starts the recording and advances to the first actual procedure step."""
-    
-    # 1. Sync with the top toolbar button to start recording safely
-    if not self.topRecordButton.isChecked():
-        self.topRecordButton.setChecked(True)
-        try:
-            self.onStartStopRecordingClicked() # This triggers the actual Sequence Browser recording
-        except Exception as e:
-            # If Slicer throws a background recording error, print it but DON'T stop the checklist!
-            print(f"Silent recording error ignored: {e}") 
+    # Start the actual recording sequence in Slicer
+    if not self.ultrasound.startStopRecordingButton.isChecked():
+        self.ultrasound.startStopRecordingButton.click()
+        
+    # Reveal the first dynamic procedure button
+    if hasattr(self, 'procedureButtonsList') and len(self.procedureButtonsList) > 0:
+        self.advanceProcedureStep(self.procedureStartRecordingButton, self.procedureButtonsList[0])
 
-    # 2. Advance the checklist 
-    self.advanceProcedureStep(self.procedureStartRecordingButton, self.procedureButton1)
+  def onProcedureButton1Clicked(self):
+    self.advanceProcedureStep(self.procedureButton1, self.procedureButton2)
 
+  def onProcedureButton2Clicked(self):
+    self.advanceProcedureStep(self.procedureButton2, self.procedureButton3)
+
+  def onProcedureButton3Clicked(self):
+    self.advanceProcedureStep(self.procedureButton3, self.procedureButton4)
+
+  def onProcedureButton4Clicked(self):
+    self.advanceProcedureStep(self.procedureButton4, self.procedureButton5)
+
+  def onProcedureButton5Clicked(self):
+    self.advanceProcedureStep(self.procedureButton5, self.procedureButton6)
+
+  def onProcedureButton6Clicked(self):
+    self.advanceProcedureStep(self.procedureButton6, self.procedureButton7)
+
+  def onProcedureButton7Clicked(self):
+    self.advanceProcedureStep(self.procedureButton7, self.procedureButton8)
+
+  def onProcedureButton8Clicked(self):
+    self.advanceProcedureStep(self.procedureButton8, self.procedureButton9)
+
+  def onProcedureButton9Clicked(self):
+    self.advanceProcedureStep(self.procedureButton9, self.procedureButton10)
+
+  def onProcedureButton10Clicked(self):
+    self.advanceProcedureStep(self.procedureButton10, self.procedureButton11)
+
+  def onProcedureButton11Clicked(self):
+    self.advanceProcedureStep(self.procedureButton11, self.procedureButton12)
+    self.isGuidanceActive = True # Turn on 3D tracking warnings
+
+  def onProcedureButton12Clicked(self):
+    self.advanceProcedureStep(self.procedureButton12, self.procedureButton13)
+
+  def onProcedureButton13Clicked(self):
+    self.advanceProcedureStep(self.procedureButton13, self.procedureButton14)
+
+  def onProcedureButton14Clicked(self):
+    self.advanceProcedureStep(self.procedureButton14, self.procedureButton15)
+
+  def onProcedureButton15Clicked(self):
+    self.advanceProcedureStep(self.procedureButton15, self.procedureButton16)
+
+  def onProcedureButton16Clicked(self):
+    self.advanceProcedureStep(self.procedureButton16, self.procedureButton17)
+
+  def onProcedureButton17Clicked(self):
+    self.advanceProcedureStep(self.procedureButton17, self.procedureButton18)
+
+  def onProcedureButton18Clicked(self):
+    self.advanceProcedureStep(self.procedureButton18, self.procedureButton19)
+
+  def onProcedureButton19Clicked(self):
+    self.advanceProcedureStep(self.procedureButton19, self.procedureButton20)
+    self.isGuidanceActive = False # Turn off tracking warnings
+    self.hideNeedleWarningActors()
+
+  def onProcedureButton20Clicked(self):
+    self.advanceProcedureStep(self.procedureButton20, self.procedureButton21)
+
+  def onProcedureButton21Clicked(self):
+    self.advanceProcedureStep(self.procedureButton21, self.procedureButton22)
+
+  def onProcedureButton22Clicked(self):
+    self.advanceProcedureStep(self.procedureButton22, self.procedureButton23)
+
+  def onProcedureButton23Clicked(self):
+    self.advanceProcedureStep(self.procedureButton23, self.procedureButton24)
+
+  def onProcedureButton24Clicked(self):
+    self.advanceProcedureStep(self.procedureButton24, self.procedureStopRecordingButton)
 
   def onProcedureStopRecordingClicked(self):
-    """Stops the recording, saves it, and advances to the completion step."""
+    # Lock the stop button
+    self.procedureStopRecordingButton.setEnabled(False)
+    self.procedureStopRecordingButton.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; border-radius: 4px;")
     
-    # 1. Sync with the top toolbar button to stop recording
-    if self.topRecordButton.isChecked():
-        self.topRecordButton.setChecked(False)
-        try:
-            self.onStartStopRecordingClicked() # Stops the Sequence Browser recording
-        except Exception as e:
-            print(f"Silent recording error ignored: {e}")
-
-    # --- THE FIX: Trigger the save function automatically ---
-    print("Recording stopped. Automatically saving files...")
-    self.saveAllRecordings()
-
-    # 2. Advance the checklist
-    self.advanceProcedureStep(self.procedureStopRecordingButton, self.procedureButton16)
+    # Stop the actual recording sequence in Slicer
+    if self.ultrasound.startStopRecordingButton.isChecked():
+        self.ultrasound.startStopRecordingButton.click()
+        
+    # Reveal the final "End of Study" button you created in setupProcedurePanel
+    if hasattr(self, 'procedureButton24'):
+        self.procedureButton24.setVisible(True)
+        layout = self.procedureButton24.parentWidget().layout()
+        if layout:
+            layout.insertWidget(0, self.procedureButton24)
 
   def onCalibrationSetupPanelToggled(self, toggled):
     if toggled == False:
