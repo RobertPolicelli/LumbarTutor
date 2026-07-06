@@ -760,9 +760,9 @@ class LumbarTutorGuidelet(Guidelet):
         # (If "horizontal" means something else for your specific files, 
         # you can change this to transform.RotateX(180) or transform.RotateY(180)!)
         transform.RotateX(180) 
-        if nodeName == 'L4_L5_TargetSpace':
-          transform.RotateZ(180)
-          transform.RotateY(180)
+        # if nodeName == 'L4_L5_TargetSpace':
+        #   transform.RotateZ(180)
+        #   transform.RotateY(180)
         
         # 2. Apply the spin directly to the raw 3D mesh data
         transformFilter = vtk.vtkTransformPolyDataFilter()
@@ -1553,11 +1553,7 @@ class LumbarTutorGuidelet(Guidelet):
   def onExitButtonClicked(self):
     # Automatically save all tracking recordings (.sqbr)
     self.saveAllRecordings() 
-    self.onSaveSceneClicked() 
 
-    mainwindow = slicer.util.mainWindow()
-    if mainwindow:
-      mainwindow.close()
     # Create a filename with the current date/time to avoid overwriting old files
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     mrbFileName = f"LumbarTutor_Scene_{timestamp}.mrb"
@@ -1568,6 +1564,11 @@ class LumbarTutorGuidelet(Guidelet):
     # Tell Slicer to bundle and save the entire scene to that path
     slicer.util.saveScene(mrbFilePath)
     print(f"Successfully bundled and saved scene to: {mrbFilePath}")
+
+    # Close Slicer AFTER saving is fully completed
+    mainwindow = slicer.util.mainWindow()
+    if mainwindow:
+      mainwindow.close()
 
   def calibrationSetupPanel(self):
     logging.debug('calibrationSetupPanel')
@@ -2017,7 +2018,7 @@ class LumbarTutorGuidelet(Guidelet):
       self.anatomyLayout.addWidget(self.l5Button)
       self.l5Button.setEnabled(False)
 
-      self.togglePostureButton = self.createWrappedButton("Toggle Posture (Neutral / Extended)")
+      self.togglePostureButton = self.createWrappedButton("Click to Toggle Posture (Neutral / Flexed)")
       self.togglePostureButton.setVisible(False)
       # Give it a nice blue color to stand out from the completion button
       self.togglePostureButton.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; border-radius: 4px; padding: 4px;")
