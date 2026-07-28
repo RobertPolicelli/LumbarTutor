@@ -70,6 +70,7 @@ class LumbarTutorLogic(GuideletLogic):
                    'RecordingFilenamePrefix' : 'LumbarTutorRec-',
                    'SavedScenesDirectory': os.path.join( moduleDir, 'SavedScenes' ), #overwrites the default setting param of base
                    'PlusWebcamServerHostNamePort': 'localhost:18945',
+                   'PivotCalibrationRMSEThreshold': '1.2',
                    }
                    
     self.updateSettings(settingsList, 'Default')
@@ -208,15 +209,20 @@ class LumbarTutorGuidelet(Guidelet):
     self.calibrationCollapsibleButton = ctk.ctkCollapsibleButton()
     self.calibrationSetupPanel()
 
+    # Setup spine model selection Tab
+    self.spineModelSelectionCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.setupSpineModelSelectionPanel()
+
     # 5. Setup Procedure Tab (Bottom)
     self.procedureCollapsibleButton = ctk.ctkCollapsibleButton()
     self.setupProcedurePanel()
 
     # Tell Slicer to exclusively use our three custom panels
-    featurePanelList = [self.anatomyCollapsibleButton, self.calibrationCollapsibleButton, self.procedureCollapsibleButton]
+    featurePanelList = [self.anatomyCollapsibleButton, self.calibrationCollapsibleButton, self.spineModelSelectionCollapsibleButton, self.procedureCollapsibleButton]
 
     self.anatomyCollapsibleButton.setProperty('collapsed', False)
     self.calibrationCollapsibleButton.setProperty('collapsed', True) 
+    self.spineModelSelectionCollapsibleButton.setProperty('collapsed', True)
     self.procedureCollapsibleButton.setProperty('collapsed', True)   
     
     return featurePanelList
@@ -260,6 +266,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.togglePostureButton.connect('clicked(bool)', self.onTogglePostureClicked)
     self.anatomyCompleteButton.connect('clicked(bool)', self.onAnatomyCompleteClicked)
     self.calibrationCollapsibleButton.connect('toggled(bool)', self.onCalibrationSetupPanelToggled)
+    self.spineModelSelectionCollapsibleButton.connect('toggled(bool)', self.onSpineModelSelectionPanelToggled)
     self.procedureCollapsibleButton.connect('toggled(bool)', self.onProcedureTabToggled)
     self.anatomyCollapsibleButton.connect('toggled(bool)', self.onAnatomyTabToggled)
 
@@ -268,6 +275,13 @@ class LumbarTutorGuidelet(Guidelet):
     self.pivotSamplingTimer.connect('timeout()', self.onPivotSamplingTimeout)
     
     self.viewAlignmentButton.connect('clicked()', self.align3DView)
+    
+    # connect spine model selection buttons
+    self.spineModel1Button.connect('clicked(bool)', self.onSpineModel1ButtonClicked)
+    self.spineModel2Button.connect('clicked(bool)', self.onSpineModel2ButtonClicked)
+    self.spineModel3Button.connect('clicked(bool)', self.onSpineModel3ButtonClicked)
+    self.spineModel4Button.connect('clicked(bool)', self.onSpineModel4ButtonClicked)
+    self.spineModel5Button.connect('clicked(bool)', self.onSpineModel5ButtonClicked)
     
     # Keyboard shortcuts
     if ( not hasattr( self, 'startStopShortcutPlus' ) or self.startStopShortcutPlus is None ):
@@ -401,9 +415,49 @@ class LumbarTutorGuidelet(Guidelet):
         (0.2, 0.8, 1.0)
     )
 
+    # load the 5 spine models to select from for data collection
+
+    self.spineModel1 = {
+      "SB1": self.loadOrCreateModel('SpineBasketModel1', 'Lumbuddy1.stl', (0.2, 0.8, 1.0)),
+      "SC1": self.loadOrCreateModel('SpinalCanalModel1', 'lumbuddy1_L4_L5_target.stl', (1.0, 0.85, 0.2))
+    }
+    self.spineModel2 = {
+      "SB2": self.loadOrCreateModel('SpineBasketModel2', 'Lumbuddy2.stl', (0.2, 0.8, 1.0)),
+      "SC2": self.loadOrCreateModel('SpinalCanalModel2', 'lumbuddy2_L4_L5_target.stl', (1.0, 0.85, 0.2))
+    }
+    self.spineModel3 = {
+      "SB3": self.loadOrCreateModel('SpineBasketModel3', 'Lumbuddy3.stl', (0.2, 0.8, 1.0)),
+      "SC3": self.loadOrCreateModel('SpinalCanalModel3', 'lumbuddy3_L4_L5_target.stl', (1.0, 0.85, 0.2))
+    }
+    self.spineModel4 = {
+      "SB4": self.loadOrCreateModel('SpineBasketModel4', 'Lumbuddy4.stl', (0.2, 0.8, 1.0)),
+      "SC4": self.loadOrCreateModel('SpinalCanalModel4', 'lumbuddy4_L4_L5_target.stl', (1.0, 0.85, 0.2))
+    }
+    self.spineModel5 = {
+      "SB5": self.loadOrCreateModel('SpineBasketModel5', 'Lumbuddy5.stl', (0.2, 0.8, 1.0)),
+      "SC5": self.loadOrCreateModel('SpinalCanalModel5', 'lumbuddy5_L4_L5_target.stl', (1.0, 0.85, 0.2))
+    }
+
     if self.nonAnatomyTabModel and self.nonAnatomyTabModel.GetDisplayNode():
         self.nonAnatomyTabModel.GetDisplayNode().SetVisibility(False)
-        
+
+    # def hideSpineModels(spineModelDict):
+    #   for modelNode in spineModelDict.values():
+    #     if modelNode and modelNode.GetDisplayNode():
+    #       modelNode.GetDisplayNode().SetVisibility(False)
+    
+    # hideSpineModels(self.spineModel1)
+    # hideSpineModels(self.spineModel2)
+    # hideSpineModels(self.spineModel3)
+    # hideSpineModels(self.spineModel4)
+    # hideSpineModels(self.spineModel5)
+
+    self.turnOffGroupedModels(self.spineModel1)
+    self.turnOffGroupedModels(self.spineModel2)
+    self.turnOffGroupedModels(self.spineModel3)
+    self.turnOffGroupedModels(self.spineModel4)
+    self.turnOffGroupedModels(self.spineModel5)
+
     self.spinalCanalModel = self.loadOrCreateModel('SpinalCanalModel', 'curved_spinal_canal.stl', (1.0, 0.85, 0.2)) # Yellow color
     if self.spinalCanalModel and self.spinalCanalModel.GetDisplayNode():
         self.spinalCanalModel.GetDisplayNode().SetVisibility(False)
@@ -901,6 +955,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.anatomyCompleteButton.disconnect('clicked(bool)', self.onAnatomyCompleteClicked)
 
     self.calibrationCollapsibleButton.disconnect('toggled(bool)', self.onCalibrationSetupPanelToggled)
+    self.spineModelSelectionCollapsibleButton.disconnect('toggled(bool)', self.onSpineModelSelectionPanelToggled)
     self.procedureCollapsibleButton.disconnect('toggled(bool)', self.onProcedureTabToggled)
     self.anatomyCollapsibleButton.disconnect('toggled(bool)', self.onAnatomyTabToggled)
     
@@ -981,6 +1036,24 @@ class LumbarTutorGuidelet(Guidelet):
 
   def onAnatomyTabToggled(self, toggled):
     """Triggers when the Anatomy tab opens or closes."""
+    # Hide open Spine Models from Select Spine Model tab when Anatomy tab opens
+    # for modelNode in self.spineModel1.values():
+    #   if modelNode and modelNode.GetDisplayNode():
+    #     modelNode.GetDisplayNode().SetVisibility(False)
+    self.turnOffGroupedModels(self.spineModel1)
+    self.turnOffGroupedModels(self.spineModel2)
+    self.turnOffGroupedModels(self.spineModel3)
+    self.turnOffGroupedModels(self.spineModel4)
+    self.turnOffGroupedModels(self.spineModel5)
+    # if hasattr(self, 'spineModel2') and self.spineModel2.GetDisplayNode():
+    #     self.spineModel2.GetDisplayNode().SetVisibility(False)
+    # if hasattr(self, 'spineModel3') and self.spineModel3.GetDisplayNode():
+    #     self.spineModel3.GetDisplayNode().SetVisibility(False)
+    # if hasattr(self, 'spineModel4') and self.spineModel4.GetDisplayNode():
+    #     self.spineModel4.GetDisplayNode().SetVisibility(False)
+    # if hasattr(self, 'spineModel5') and self.spineModel5.GetDisplayNode():
+    #     self.spineModel5.GetDisplayNode().SetVisibility(False)
+
     if hasattr(self, 'needleModel') and self.needleModel and self.needleModel.GetDisplayNode():
         self.needleModel.GetDisplayNode().SetVisibility(not toggled)
     if hasattr(self, 'targetSpaceL4L5') and self.targetSpaceL4L5.GetDisplayNode():
@@ -1904,7 +1977,7 @@ class LumbarTutorGuidelet(Guidelet):
       self.countdownLabel.setText("Calibration failed: " + self.pivotCalibrationLogic.GetErrorText())
       self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
       return
-    if(self.pivotCalibrationLogic.GetPivotRMSE() >= 1.2):  # TODO: Make this a node paramter
+    if(self.pivotCalibrationLogic.GetPivotRMSE() >= float(self.parameterNode.GetParameter('PivotCalibrationRMSEThreshold'))):
       self.countdownLabel.setText("Calibration failed, error = {0:.2f} mm, please calibrate again!".format(self.pivotCalibrationLogic.GetPivotRMSE()))
       self.pivotCalibrationLogic.ClearToolToReferenceMatrices()
       return
@@ -2096,6 +2169,37 @@ class LumbarTutorGuidelet(Guidelet):
     btnLayout.setContentsMargins(8, 8, 8, 8)
     btnLayout.addWidget(label)
     return btn
+
+  def setupSpineModelSelectionPanel(self):
+    logging.debug('setupSpineModelSelectionPanel')
+
+    self.spineModelSelectionCollapsibleButton.setProperty('collapsedHeight', 20)
+    self.spineModelSelectionCollapsibleButton.text = 'Spine Model Selection'
+    self.sliceletPanelLayout.addWidget(self.spineModelSelectionCollapsibleButton)
+
+    self.spineModelSelectionLayout = qt.QFormLayout(self.spineModelSelectionCollapsibleButton)
+    self.spineModelSelectionLayout.setContentsMargins(12, 4, 4, 4)
+    self.spineModelSelectionLayout.setSpacing(4)
+
+    self.spineModel1Button = qt.QPushButton("Select Spine Model 1")
+    self.spineModel1Button.setCheckable(False)
+    self.spineModelSelectionLayout.addRow(self.spineModel1Button)
+
+    self.spineModel2Button = qt.QPushButton("Select Spine Model 2")
+    self.spineModel2Button.setCheckable(False)
+    self.spineModelSelectionLayout.addRow(self.spineModel2Button)
+
+    self.spineModel3Button = qt.QPushButton("Select Spine Model 3")
+    self.spineModel3Button.setCheckable(False)
+    self.spineModelSelectionLayout.addRow(self.spineModel3Button)
+
+    self.spineModel4Button = qt.QPushButton("Select Spine Model 4")
+    self.spineModel4Button.setCheckable(False)
+    self.spineModelSelectionLayout.addRow(self.spineModel4Button)
+
+    self.spineModel5Button = qt.QPushButton("Select Spine Model 5")
+    self.spineModel5Button.setCheckable(False)
+    self.spineModelSelectionLayout.addRow(self.spineModel5Button)
   
   def advanceProcedureStep(self, currentButton, nextButtons=None):
     """Disables current step, turns it green, and forces new steps to the absolute top."""
@@ -2190,7 +2294,8 @@ class LumbarTutorGuidelet(Guidelet):
         "Remove the needle slowly",
         "Apply pressure to the insertion site and apply a bandage",
         "Dispose of the needle in the sharps container",
-        "Remove drapes and clean up procedure area"
+        "Remove drapes and clean up procedure area",
+        "Move to next spine model"
     ]
 
     self.procedureButtonsList = []
@@ -2247,6 +2352,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.advanceProcedureStep(self.procedureButton7, self.procedureButton8)
 
   def onProcedureButton8Clicked(self):
+    self.updateNeedleTrackingDisplay()
     self.advanceProcedureStep(self.procedureButton8, self.procedureButton9)
 
   def onProcedureButton9Clicked(self):
@@ -2269,6 +2375,7 @@ class LumbarTutorGuidelet(Guidelet):
     self.advanceProcedureStep(self.procedureButton14, self.procedureButton15)
 
   def onProcedureButton15Clicked(self):
+    self.updateNeedleTrackingDisplay()
     self.advanceProcedureStep(self.procedureButton15, self.procedureButton16)
 
   def onProcedureButton16Clicked(self):
@@ -2326,6 +2433,82 @@ class LumbarTutorGuidelet(Guidelet):
     self.updateNavigationView()
     self.tiltSpineModels(0)
     self.align3DView()
+
+  def onSpineModelSelectionPanelToggled(self, toggled):
+    if toggled == False:
+      return
+
+    logging.debug('onSpineModelSelectionPanelToggled: {0}'.format(toggled))
+    self.hideNeedleWarningActors()
+    self.navigationView = self.parameterNode.GetParameter( "SpineModelSelectionLayout" )
+    self.updateNavigationView()
+    self.tiltSpineModels(0)
+    self.align3DView()
+
+  def turnOnGroupedModels(self, modelGroup):
+    # Turn on all models in the specified group
+    for modelNode in modelGroup.values():
+      if modelNode and modelNode.GetDisplayNode():
+        modelNode.GetDisplayNode().SetVisibility(True)
+
+  def turnOffGroupedModels(self, modelGroup):
+    # Turn off all models in the specified group
+    for modelNode in modelGroup.values():
+      if modelNode and modelNode.GetDisplayNode():
+        modelNode.GetDisplayNode().SetVisibility(False)
+
+  def turnOffOtherSpineModels(self, exceptModel):
+    # Turn off all spine models except the one specified
+    if self.nonAnatomyTabModel and exceptModel != self.nonAnatomyTabModel:
+      self.nonAnatomyTabModel.GetDisplayNode().SetVisibility(False)
+    if self.spineModel1.values() and exceptModel != self.spineModel1:
+      self.turnOffGroupedModels(self.spineModel1)
+    # for modelNode in self.spineModel1.values():
+    #   if modelNode and modelNode.GetDisplayNode():
+    #     modelNode.GetDisplayNode().SetVisibility(False)
+    if self.spineModel2 and exceptModel != self.spineModel2:
+      self.turnOffGroupedModels(self.spineModel2)
+    if self.spineModel3 and exceptModel != self.spineModel3:
+      self.turnOffGroupedModels(self.spineModel3)
+    if self.spineModel4 and exceptModel != self.spineModel4:
+      self.turnOffGroupedModels(self.spineModel4)
+    if self.spineModel5 and exceptModel != self.spineModel5:
+      self.turnOffGroupedModels(self.spineModel5)
+
+  def onSpineModel1ButtonClicked(self):
+    # set visibility of model to on
+    self.turnOnGroupedModels(self.spineModel1)
+
+    # turn visibility of other spine models to off
+    self.turnOffOtherSpineModels(self.spineModel1)
+    
+  def onSpineModel2ButtonClicked(self):
+    # set visibility of model to on
+    self.turnOnGroupedModels(self.spineModel2)
+
+    # turn visibility of other spine models to off
+    self.turnOffOtherSpineModels(self.spineModel2)
+
+  def onSpineModel3ButtonClicked(self):
+    # set visibility of model to on
+    self.turnOnGroupedModels(self.spineModel3)
+
+    # turn visibility of other spine models to off
+    self.turnOffOtherSpineModels(self.spineModel3)
+
+  def onSpineModel4ButtonClicked(self):
+    # set visibility of model to on
+    self.turnOnGroupedModels(self.spineModel4)
+
+    # turn visibility of other spine models to off
+    self.turnOffOtherSpineModels(self.spineModel4)
+
+  def onSpineModel5ButtonClicked(self):
+    # set visibility of model to on
+    self.turnOnGroupedModels(self.spineModel5)
+
+    # turn visibility of other spine models to off
+    self.turnOffOtherSpineModels(self.spineModel5)
 
   def onProcedureTabToggled(self, toggled):
     if toggled:

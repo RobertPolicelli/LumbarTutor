@@ -1,1 +1,17 @@
 dual_realsense_recording/
+# Ignore Slicer tracking recordings
+*.sqbr
+
+# Ignore bundled Slicer scenes
+*.mrb
+*.mrml
+
+# Ignore extracted data files
+*.csv
+
+# Ignore the entire SavedScenes directory (if it is inside your repository)
+SavedScenes/
+
+# Standard Python cache files (always good practice)
+__pycache__/
+*.pyc
