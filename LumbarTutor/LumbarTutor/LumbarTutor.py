@@ -1716,23 +1716,42 @@ class LumbarTutorGuidelet(Guidelet):
               back_y = world_Y_coords[-1]
 
               if y > front_y:
+                  self.timeEnteredSpinalColumn = None # Reset timer
                   dist = y - front_y
                   self.emTextActor.SetInput(f"Status: In Front Target!")
                   self.emTextActor.GetTextProperty().SetColor(0.2, 0.8, 1.0)
                   isInFrontOfTarget = True
               elif y < back_y:
+                  self.timeEnteredSpinalColumn = None # Reset timer
                   dist = back_y - y
                   self.emTextActor.SetInput(f"Status: Behind Target!")
                   self.emTextActor.GetTextProperty().SetColor(1.0, 0.2, 0.2)
                   isInFrontOfTarget = True
               else:
+                  # --- INSIDE TARGET LOGIC ---
+                  # 1. Start the timer if it hasn't been started yet
+                  if getattr(self, 'timeEnteredSpinalColumn', None) is None:
+                      self.timeEnteredSpinalColumn = time.time()
+                  
+                  # 2. Calculate how many seconds have passed
+                  elapsed_time = time.time() - self.timeEnteredSpinalColumn
                   dist = front_y - y
-                  self.emTextActor.SetInput(f"Status: INSIDE TARGET!")
-                  self.emTextActor.GetTextProperty().SetColor(0.2, 1.0, 0.2)
                   isInFrontOfTarget = True
+                  
+                  # 3. Trigger 5-second alert
+                  if elapsed_time >= 5.0:
+                      self.emTextActor.SetInput(f"Status: TARGET REACHED (> 5 SECONDS!)")
+                      self.emTextActor.GetTextProperty().SetColor(0.1, 1.0, 0.1) # Brighter Green Color
+                      if not getattr(self, 'targetReachedSaved', False):
+                          self.saveTargetReachedMetric()
+                          self.targetReachedSaved = True
+                  else:
+                      self.emTextActor.SetInput(f"Status: INSIDE TARGET! ({int(elapsed_time)}s)")
+                      self.emTextActor.GetTextProperty().SetColor(0.2, 1.0, 0.2) # Standard green
           else:
               self.emTextActor.SetInput("Status: Off Target (Center The Needle)")
               self.emTextActor.GetTextProperty().SetColor(1.0, 0.6, 0.2)
+        
               
       # 3. Calculate Needle Angle (Up/Down relative to global Z-axis)
       import math
@@ -1775,16 +1794,21 @@ class LumbarTutorGuidelet(Guidelet):
                   self.angleTextActor.GetTextProperty().SetColor(0.2, 1.0, 0.2)
           else:
               self.angleTextActor.SetVisibility(False)
+      else:
+        # If Guidance is NOT active, ensure all text actors stay hidden even if the needle moves
+        self.timeEnteredSpinalColumn = None # Reset the timer when guidance is off
+        for actorName in ['emTextActor', 'alignmentTextActor', 'angleTextActor']:
+          if hasattr(self, actorName):
+            getattr(self, actorName).SetVisibility(False)
               
       # Disable ONLY the alignment text while guidance is active
       if hasattr(self, 'alignmentTextActor'):
           self.alignmentTextActor.SetVisibility(False)
-
     else:
-      # If Guidance is NOT active, ensure all text actors stay hidden even if the needle moves
-      for actorName in ['emTextActor', 'alignmentTextActor', 'angleTextActor']:
-        if hasattr(self, actorName):
-          getattr(self, actorName).SetVisibility(False)
+          # If Guidance is NOT active, ensure all text actors stay hidden even if the needle moves
+          for actorName in ['emTextActor', 'alignmentTextActor', 'angleTextActor']:
+            if hasattr(self, actorName):
+              getattr(self, actorName).SetVisibility(False)
 
     # 4. Show the raw tracked needle.
     if hasattr(self, 'needleModel') and self.needleModel:
@@ -1805,6 +1829,29 @@ class LumbarTutorGuidelet(Guidelet):
     if layoutManager and layoutManager.threeDWidget(0):
       layoutManager.threeDWidget(0).threeDView().scheduleRender()
 
+  def saveTargetReachedMetric(self):
+    """Appends a timestamped record to a CSV file when the user holds the target for 5 seconds."""
+    import time
+    import os
+    
+    # 1. Get your designated save folder
+    savedScenesDirectory = self.parameterNode.GetParameter('SavedScenesDirectory')
+    if not os.path.exists(savedScenesDirectory):
+      os.makedirs(savedScenesDirectory)
+        
+    # 2. Define the path for the metrics log
+    logFilePath = os.path.join(savedScenesDirectory, "ProcedureMetricsLog.csv")
+    
+    # 3. Gather the data to save
+    currentUserId = getattr(self, 'userID', 'UnknownUser')
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    
+    # 4. Write it to the file (using "a" for append mode so it doesn't overwrite old attempts)
+    with open(logFilePath, "a") as logFile:
+      logFile.write(f"{currentUserId},{timestamp},Target Maintained for 5 Seconds\n")
+        
+    print(f"SUCCESS: Target metric saved to {logFilePath}")
+    
   def onNeedleCalibrationClicked(self, toggled):
     logging.debug('onNeedleCalibrationClicked')
     self.pivotCalibrationButton.setEnabled(False)
